@@ -1,5 +1,5 @@
 \chapter{Introduction}
-This thesis explores how global IPv6 addressing increases the attack surface of the Internet of Things (IoT) environment. The study combines not only a comprehensive literature review but also an empirical assessment of default system configurations through controlled laboratory demonstrations, highlighting how the adoption of new network standards can potentially affect the security of millions of end devices.
+This thesis explores how global IPv6 addressing increases the attack surface of the Internet of Things (IoT) environment. The study combines not only a comprehensive literature review but also an empirical assessment of default system configurations through controlled laboratory demonstrations, highlighting how the adoption of new network standards can potentially affect the security of millions of end IoT devices.
 %Should I focus in domestic networks?
 
 \section{The IPv4 to IPv6 Transition}
@@ -7,9 +7,9 @@ is the result of an inherent limitation in the design of IPv4’s address space,
 
 In practice, NAT allows multiple internal hosts within a private local-area network (LAN) to share a single IPv4 address by translating internal IP addresses and TCP/UDP port numbers to a public address and port at the network boundary. This translation process is stateful and connection-oriented, meaning that the address mappings are created only for outbound traffic initiated by hosts within the LAN~\cite{rfc3022,rfc4787}. Consequently, unless explicitly allowed through static port-forwarding rules, any unsolicited inbound traffic that does not match an existing mapping entry is discarded by default ~\cite{rfc4787}. Nonetheless, the use of NAT translation tables violates the original end-to-end connectivity principle of the Internet architecture~\cite{saltzer1984end}, and simultaneously provides a form of perimeter protection by preventing direct external access to internal hosts. 
 
-\section{Loss of NAT and IoT Exposure}
-
-
+\section{Loss of NAT and Increased IoT Exposure}
+reflects a shift in network architecture paradigms. Until now, many IoT devices have been designed under an implicit threat model that assumes limited inbound reachability, relying primarily on network topology rather than on end-device security mechanisms. With the deprecation of NAT under IPv6, this assumption no longer holds. Devices become directly reachable without any change to their internal security properties, thereby increasing their effective exposure~\cite{saltzer1984end,rfc8200}.
+The direct exposure from IoT devices is speceially problematic
 \section{Research Objectives \& Questions}
 
 
