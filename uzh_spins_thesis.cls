@@ -142,8 +142,8 @@
    {\bf Project period:} & \@begindate \ - \@enddate \\[4\p@]
  \end{tabular}
  \vskip 4\p@
- \noindent Security and Privacy of Information, Networks, and Systems (SPINS)\\[2\p@]
- \noindent Department of Informatics (IfI), University of Zurich%
+ \noindent Systems Group, Institute for Computing Platforms\\[2\p@]
+ \noindent Department of Computer Science (D-INFK), ETH Zurich%
 }
 \renewcommand\chapter{\if@openright
                         \clearpage\thispagestyle{empty}\cleardoublepage
@@ -214,22 +214,22 @@
 
 \titleformat{\section}[runin]
   {\normalfont\normalsize\bfseries}
-  {}
-  {0em}
+  {\thesection}
+  {0.6em}
   {}
 \titlespacing*{\section}{0pt}{3.5ex plus 1ex minus .2ex}{1em}
 
 \titleformat{\subsection}[runin]
   {\normalfont\normalsize\bfseries}
-  {}
-  {0em}
+  {\thesubsection}
+  {0.6em}
   {}
 \titlespacing*{\subsection}{0pt}{3.25ex plus 1ex minus .2ex}{1em}
 
 \titleformat{\subsubsection}[runin]
   {\normalfont\normalsize\bfseries}
-  {}
-  {0em}
+  {\thesubsubsection}
+  {0.6em}
   {}
 \titlespacing*{\subsubsection}{0pt}{3.25ex plus 1ex minus .2ex}{1em}
 
