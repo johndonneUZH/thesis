@@ -4,9 +4,9 @@
 
 \subsection{Vector representation}
 
-Modern data-intensive applications increasingly rely on representing complex objects (e.g., text, images, or user behavior) as high-dimensional vectors. These vector representations, often referred to as embeddings, are typically learned using machine learning models and capture semantic or structural relationships in the data \cite{almeida2023wordembeddingssurvey}. As a result, semantically similar objects are mapped to nearby points in a continuous vector space, allowing similarity between objects to be measured using geometric distance functions such as Euclidean distance or cosine similarity.
+Modern data-intensive applications increasingly rely on representing complex objects (e.g., text, images or user behavior) as high-dimensional vectors. These vector representations, often referred to as embeddings, are typically learned using machine learning models and capture semantic or structural relationships in the data \cite{almeida2023wordembeddingssurvey}. As a result, semantically similar objects are mapped to nearby points in a continuous vector space, allowing similarity between objects to be measured using geometric distance functions such as Euclidean distance or cosine similarity.
 
-The widespread adoption of embeddings has led to the emergence of vector databases, which extend traditional database systems by supporting efficient similarity-based retrieval over high-dimensional vectors. In contrast to conventional databases that primarily operate on structured attributes and exact-match queries, vector databases are designed to handle nearest neighbor search over embeddings at scale, enabling applications such as semantic search, recommendation systems, and retrieval-augmented generation. \cite{ma2026comprehensivesurveyvectordatabase}
+The widespread adoption of embeddings has led to the emergence of vector databases, which extend traditional database systems by enabling efficient similarity-based retrieval. Unlike conventional databases that operate primarily on structured attributes and exact-match queries, vector databases are designed to efficiently find similar items in large collections of embeddings by leveraging specialized index structures (e.g., graph-based or tree-based indexes) and approximate nearest neighbor search algorithms \cite{ma2026comprehensivesurveyvectordatabase}.
 
 \subsection{Nearest Neighbor Search}
 
@@ -140,6 +140,45 @@ This distinction is fundamental for filtered vector search. Two predicates may h
 while inducing very different values of \(C(q,p)\). In that case, the two queries have the same number of admissible vectors but differ substantially in geometric difficulty. Correlation therefore captures an aspect of filtered vector search that selectivity alone cannot express.
 
 Correlation therefore captures a fundamental aspect of filtered vector search that selectivity alone cannot express. In this thesis, we develop a practical method to estimate this quantity efficiently.
-\section{Distribution Divergence}\label{sec:distribution-divergence}
+
+\section{Execution Strategies}\label{sec:execution-strategies}
+
+Execution strategies for filtered vector search define how structured filter predicates are combined with nearest neighbor search.
+
+The main difference between execution strategies is when and how the filter is applied in relation to the search process. This design choice directly affects performance, efficiency, and result quality.
+
+Formally, given a dataset \( D \subset \mathbb{R}^d \) and a Boolean filter predicate \( \phi \), the goal is to compute the top-\(k\) nearest neighbors of a query vector \( q \in \mathbb{R}^d \) restricted to the subset
+\[
+D_\phi = \{ x \in D \mid \phi(x) = \text{true} \}.
+\]
+
+In this thesis, we focus on three main execution strategies.
+
+\subsection{Pre-filtering}\label{sec:pre-filtering}
+
+In pre-filtering, the filter predicate is evaluated first, producing the subset \( D_\phi \). The nearest neighbor search is then executed exclusively on this subset.
+
+This approach guarantees that all returned results satisfy the filter and directly focuses the search on the relevant candidates. However, most vector indexes are designed for the full dataset, so we cannot use them for dynamically restricted subsets. As a result, their effectiveness may degrade, particularly for filters which induce a big subset (high selectivity), since we have to compute NN search on many vectors, and that's very expensive with no indexes.
+
+\subsection{Post-filtering}\label{sec:post-filtering}
+
+In post-filtering, the nearest neighbor search is performed over the entire dataset without considering the filter predicate. The filter is applied only after retrieving a set of candidate neighbors.
+
+This allows the index to operate under its optimal conditions. However, it does not guarantee that \(k\) valid results are returned. If many retrieved neighbors do not satisfy the filter, additional candidates must be examined, increasing query cost and potentially affecting efficiency.
+
+\subsection{Inline Filtering}\label{sec:inline-filtering}
+
+Inline filtering incorporates the filter predicate directly into the search procedure. During index traversal, candidates that do not satisfy the filter are pruned, and only valid vectors are considered for distance evaluation and result construction.
+
+This approach avoids materializing the filtered subset (as in pre-filtering) and reduces wasted work on invalid candidates (as in post-filtering). However, it requires index structures and search algorithms that support predicate-aware traversal, which increases implementation complexity.
+
 
 \section{Research Gap}\label{sec:research-gap}
+
+Filtered vector search systems often exploit dependencies within the data to improve performance, for example in selectivity estimation \cite{corrbound}, index construction, or query execution \cite{acorn}. In these settings, such relationships play an important role in guiding system behavior and improving efficiency.
+
+In this thesis, we adopt a more general and systematic perspective on modeling these dependencies. Rather than incorporating them implicitly within a specific method, we treat them as a standalone property of the data and derive a quantitative measure based on database statistics. This measure captures the interaction between filter predicates and the underlying vector distribution, enabling a more principled analysis of how filtering affects nearest neighbor search.
+
+A key aspect of our approach is that the proposed formulation is independent of any particular index structure or execution strategy. It can therefore be used as a generic component and integrated into existing systems without requiring substantial modifications. This makes it applicable across a wide range of filtered vector search settings, including both exact and approximate methods.
+
+By introducing a reusable and system-agnostic characterization of these dependencies, this thesis facilitates the development of methods that can incorporate such information in a modular way. Rather than targeting a single specialized solution, we provide a general abstraction that can be leveraged to improve different aspects of filtered vector search, including query planning, candidate selection, and execution strategy design.
