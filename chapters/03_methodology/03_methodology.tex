@@ -1,11 +1,29 @@
-\chapter{Problem Definition}\label{chap:problem-definition}
-compute and verify the new proposed metric introduced in \ref{chap:correlation-metric} 
+\chapter{Methodology}\label{chap:methodology}
+
+This chapter describes the methodology used to evaluate the proposed correlation metric. The goal is to study how the relationship between structured attributes and the embedding space affects query behavior in filtered vector search.
+
+To this end, we define a data model and a query model, and evaluate the proposed metric across different datasets and query configurations. The methodology is designed to isolate the effect of attribute--embedding interaction while remaining independent of a specific index structure.
+
 \section{Data Model}
-- handcrafted dataset (proof of concept) = sift1m + generated attributes
-    - 1M vectors w/ 128D
-- glove
+
+We consider datasets of high-dimensional vectors, where each vector is associated with a structured attribute.
+
+As a proof of concept, we use a handcrafted dataset based on SIFT1M, consisting of one million vectors of dimension 128. Structured attributes are generated and attached to these vectors to control the degree of correlation with the embedding space.
+
+In addition, we use real-world embeddings based on GloVe to evaluate the proposed approach under more realistic data distributions.
+
 \section{Query Model}
-    - 10000 vectors w/ 128D
-        - recall@k w/ k = 100
+
+Queries consist of a vector and a structured predicate. The predicate is defined as a range over the attribute domain.
+
+For evaluation, we use a set of 10,000 query vectors. For each query, we retrieve the top-$k$ nearest neighbors under the given predicate, with $k = 100$.
+
+This setup allows us to analyze how filtering affects retrieval behavior under different query conditions.
+
+\section{Evaluation Setup}
+
+We evaluate query performance using recall@k, comparing approximate results to exact nearest neighbors.
+
+To isolate the effect of attribute--embedding interaction, we consider queries with varying degrees of correlation between the predicate and the embedding space. This allows us to study how the proposed metric relates to retrieval difficulty and execution behavior.
 
 \section{Objective}

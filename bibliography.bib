@@ -249,3 +249,54 @@ pages = {461–472},
 numpages = {12}
 }
 
+@inproceedings{milvus,
+author = {Wang, Jianguo and Yi, Xiaomeng and Guo, Rentong and Jin, Hai and Xu, Peng and Li, Shengjun and Wang, Xiangyu and Guo, Xiangzhou and Li, Chengming and Xu, Xiaohai and Yu, Kun and Yuan, Yuxing and Zou, Yinghao and Long, Jiquan and Cai, Yudong and Li, Zhenxiang and Zhang, Zhifeng and Mo, Yihua and Gu, Jun and Jiang, Ruiyi and Wei, Yi and Xie, Charles},
+title = {Milvus: A Purpose-Built Vector Data Management System},
+year = {2021},
+isbn = {9781450383431},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3448016.3457550},
+doi = {10.1145/3448016.3457550},
+abstract = {Recently, there has been a pressing need to manage high-dimensional vector data in data science and AI applications. This trend is fueled by the proliferation of unstructured data and machine learning (ML), where ML models usually transform unstructured data into feature vectors for data analytics, e.g., product recommendation. Existing systems and algorithms for managing vector data have two limitations: (1) They incur serious performance issue when handling large-scale and dynamic vector data; and (2) They provide limited functionalities that cannot meet the requirements of versatile applications.This paper presents Milvus, a purpose-built data management system to efficiently manage large-scale vector data. Milvus supports easy-to-use application interfaces (including SDKs and RESTful APIs); optimizes for the heterogeneous computing platform with modern CPUs and GPUs; enables advanced query processing beyond simple vector similarity search; handles dynamic data for fast updates while ensuring efficient query processing; and distributes data across multiple nodes to achieve scalability and availability. We first describe the design and implementation of Milvus. Then we demonstrate the real-world use cases supported by Milvus. In particular, we build a series of 10 applications (e.g., image/video search, chemical structure analysis, COVID-19 dataset search, personalized recommendation, biological multi-factor authentication, intelligent question answering) on top of Milvus. Finally, we experimentally evaluate Milvus with a wide range of systems including two open source systems (Vearch and Microsoft SPTAG) and three commercial systems. Experiments show that Milvus is up to two orders of magnitude faster than the competitors while providing more functionalities. Now Milvus is deployed by hundreds of organizations worldwide and it is also recognized as an incubation-stage project of the LF AI \& Data Foundation. Milvus is open-sourced at https://github.com/milvus-io/milvus.},
+booktitle = {Proceedings of the 2021 International Conference on Management of Data},
+pages = {2614–2627},
+numpages = {14},
+keywords = {data science, heterogeneous computing, high-dimensional similarity search, machine learning, vector database},
+location = {Virtual Event, China},
+series = {SIGMOD '21}
+}
+
+@inproceedings{filtereddiskann,
+author = {Gollapudi, Siddharth and Karia, Neel and Sivashankar, Varun and Krishnaswamy, Ravishankar and Begwani, Nikit and Raz, Swapnil and Lin, Yiyong and Zhang, Yin and Mahapatro, Neelam and Srinivasan, Premkumar and Singh, Amit and Simhadri, Harsha Vardhan},
+title = {Filtered-DiskANN: Graph Algorithms for Approximate Nearest Neighbor Search with Filters},
+year = {2023},
+isbn = {9781450394161},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3543507.3583552},
+doi = {10.1145/3543507.3583552},
+abstract = {As Approximate Nearest Neighbor Search (ANNS)-based dense retrieval becomes ubiquitous for search and recommendation scenarios, efficiently answering filtered ANNS queries has become a critical requirement. Filtered ANNS queries ask for the nearest neighbors of a query’s embedding from the points in the index that match the query’s labels such as date, price range, language. There has been little prior work on algorithms that use label metadata associated with vector data to build efficient indices for filtered ANNS queries. Consequently, current indices have high search latency or low recall which is not practical in interactive web-scenarios. We present two algorithms with native support for faster and more accurate filtered ANNS queries: one with streaming support, and another based on batch construction. Central to our algorithms is the construction of a graph-structured index which forms connections not only based on the geometry of the vector data, but also the associated label set. On real-world data with natural labels, both algorithms are an order of magnitude or more efficient for filtered queries than the current state of the art algorithms. The generated indices also be queried from an SSD and support thousands of queries per second at over recall@10.},
+booktitle = {Proceedings of the ACM Web Conference 2023},
+pages = {3406–3416},
+numpages = {11},
+keywords = {Approximate nearest neighbor search, Dense retrieval, Filtered Search, Graph algorithms, Vector Search},
+location = {Austin, TX, USA},
+series = {WWW '23}
+}
+
+@article{multiattributenhq,
+author = {Xu, Xiaoliang and Li, Chang and Wang, Yuxiang and Xia, Yixing},
+title = {Multiattribute approximate nearest neighbor search based on navigable small world graph},
+journal = {Concurrency and Computation: Practice and Experience},
+volume = {32},
+number = {24},
+pages = {e5970},
+keywords = {approximate nearest neighbor, K-nearest neighbor, multiattribute search, navigable small world graph},
+doi = {https://doi.org/10.1002/cpe.5970},
+url = {https://onlinelibrary.wiley.com/doi/abs/10.1002/cpe.5970},
+eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1002/cpe.5970},
+abstract = {Summary Approximate nearest neighbor search (ANNS) is widely employed to find the most similar data efficiently from a large-scale dataset. The key of ANNS is to construct an effective index to prune the search space and retrieve the approximate data rather than the exact one in a very short time. Most of the existing ANNS methods only adopt the distance metric to build an index, which cannot support multiattribute ANNS. In this article, we present a novel approach for multiattribute ANNS based on navigable small world (NSW) graph, called MA-NSW. Given a dataset, MA-NSW (i) builds a proximity subgraph overlay for each multiattribute combination, and integrates all overlays to a hierarchical index, (ii) adopts a navigation tree to access related subgraph overlay and prune unrelated overlays, and (iii) gets nearest neighbor results from the related overlays by greedy search. MA-NSW guarantees efficiency and it is defined in terms of arbitrary metric spaces (eg, Euclidean distance and cosine similarity). Performance evaluation has demonstrated that the proposed approach shows superior performance in multiattribute ANNS.},
+year = {2020}
+}
+

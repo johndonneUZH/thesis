@@ -4,96 +4,99 @@
 
 \subsection{Vector representation}
 
-Modern data-intensive applications increasingly rely on representing complex objects (e.g., text, images or user behavior) as high-dimensional vectors. These vector representations, often referred to as embeddings, are typically learned using machine learning models and capture semantic or structural relationships in the data \cite{almeida2023wordembeddingssurvey}. As a result, semantically similar objects are mapped to nearby points in a continuous vector space, allowing similarity between objects to be measured using geometric distance functions such as Euclidean distance or cosine similarity.
+The representation of complex items (such as text, images, or user behavior) as high-dimensional vectors has become increasingly important in modern data-intensive applications. These vectors, commonly referred to as embeddings, are typically learnt using machine learning models and capture semantic or structural relationships in the data \cite{almeida2023wordembeddingssurvey}. As a result, semantically similar items are mapped to nearby points in a continuous vector space, enabling similarity to be measured using geometric distance functions such as cosine similarity or Euclidean distance.
 
-The widespread adoption of embeddings has led to the emergence of vector databases, which extend traditional database systems by enabling efficient similarity-based retrieval. Unlike conventional databases that operate primarily on structured attributes and exact-match queries, vector databases are designed to efficiently find similar items in large collections of embeddings by leveraging specialized index structures (e.g., graph-based or tree-based indexes) and approximate nearest neighbor search algorithms \cite{ma2026comprehensivesurveyvectordatabase}.
+The widespread adoption of this paradigm has led to the emergence of vector databases, which extend traditional database systems by enabling efficient similarity-based retrieval. Unlike conventional databases that operate on structured attributes using exact or range-based predicates, vector databases are designed to efficiently retrieve similar items from large collections of vectors by leveraging specialized index structures (e.g., graph-based or tree-based indexes) and approximate nearest neighbor search algorithms \cite{ma2026comprehensivesurveyvectordatabase}.
 
 \subsection{Nearest Neighbor Search}
 
-Given a dataset of vectors $\{x_1, \dots, x_n\} \subset \mathbb{R}^d$, the nearest neighbor search problem consists of identifying the vectors that are closest to a query vector $q \in \mathbb{R}^d$ according to a distance (or dissimilarity) measure. In the $k$-nearest neighbor ($k$NN) setting, the goal is to retrieve the $k$ closest vectors to $q$. This problem is also commonly referred to as the \textit{post office problem}, where the objective is to find the closest facility to a given location.
+Given a dataset of vectors $\{x_1, \dots, x_n\} \subset \mathbb{R}^d$, the nearest neighbor search problem consists of identifying, for a query vector $q \in \mathbb{R}^d$, the vectors in the dataset that are most similar to $q$. This problem is also known as the \textit{post office problem}, where one seeks the closest facility to a given location. In the $k$-nearest neighbor ($k$NN) setting, the goal is to retrieve the $k$ most similar vectors. 
 
-The notion of “closeness” is defined through a distance function $D(\cdot, \cdot)$, which quantifies dissimilarity between vectors. Common choices include the Euclidean distance, cosine distance, and inner product-based measures. The choice of distance function plays a critical role, as it determines how similarity in the embedding space is interpreted and directly affects retrieval quality.
+To formalize this notion of similarity, we use a function $D(\cdot, \cdot)$ that assigns a numerical score to a pair of vectors, reflecting how far apart they are in the underlying space. Common choices include Euclidean distance, cosine similarity, and inner product-based measures, each capturing different notions of similarity and directly influencing retrieval quality.
 
-A straightforward solution is to compute the distance between the query and every vector in the dataset. While this exact approach guarantees optimal results, it has a time complexity of $\mathcal{O}(n \cdot d)$, which becomes prohibitive for large-scale datasets and high-dimensional spaces \cite{arya1998optimal}.
+Given such a function, a natural solution is to compute $D(q, x_i)$ for every vector $x_i$ in the dataset and return the closest ones. This approach guarantees exact results, but requires scanning the entire dataset and performing a computation of cost $\mathcal{O}(d)$ per vector, resulting in a total time complexity of $\mathcal{O}(n \cdot d)$. As both the number of vectors $n$ and the dimensionality $d$ grow, this linear scan becomes computationally expensive and leads to high query latency \cite{arya1998optimal}. Moreover, in high-dimensional spaces, the contrast between nearby and far-away points tends to diminish, making it harder to distinguish meaningful neighbors \cite{indyk1998approximate}.
 
-Nearest neighbor search is a fundamental problem in many domains, including information retrieval, machine learning, and computer vision \cite{indyk1998approximate}. However, as the dimensionality of the data increases, exact search methods suffer from the so-called \textit{curse of dimensionality}, where distance computations become increasingly expensive and less discriminative.
-
-These limitations motivate the use of approximate methods, which trade exactness for efficiency and enable scalable similarity search in high-dimensional spaces.
+These limitations motivate the use of approximate nearest neighbor approaches.
 
 \subsection{Approximate Nearest Neighbor Search}
 
-To address the scalability limitations of exact nearest neighbor search, approximate nearest neighbor (ANN) methods have been developed. These methods trade exactness for efficiency by exploring only a subset of the dataset while aiming to preserve high recall. Instead of exhaustively comparing a query against all data points, ANN algorithms rely on specialized index structures and heuristics to efficiently identify promising candidates.
+Approximate nearest neighbor (ANN) methods trade exactness for efficiency by exploring only a subset of the dataset while aiming to preserve high recall. Instead of exhaustively comparing a query against all data points, ANN algorithms rely on specialized index structures and heuristics to efficiently identify promising candidates.
 
-ANN methods can be broadly categorized into different families. A prominent class is based on hashing techniques, such as locality-sensitive hashing (LSH), which project high-dimensional vectors into lower-dimensional hash spaces in a way that preserves similarity \cite{indyk1998approximate, jafari2021surveylocalitysensitivehashing, gionis1999similarity}. The key idea behind LSH is to use hash functions that increase the probability of collision for similar vectors while reducing it for dissimilar ones. This allows candidate neighbors to be retrieved efficiently from hash buckets, enabling sub-linear query time. However, LSH-based methods may require multiple hash tables and can suffer from reduced accuracy or increased memory usage in very high-dimensional settings.
+A prominent class is based on hashing techniques, such as locality-sensitive hashing (LSH), which project high-dimensional vectors into lower-dimensional hash spaces in a way that preserves similarity \cite{jafari2021surveylocalitysensitivehashing, gionis1999similarity}. The key idea behind LSH is to use hash functions that increase the probability of collision for similar vectors while reducing it for dissimilar ones. This enables efficient retrieval of candidate neighbors from hash buckets, often achieving sub-linear query time. The downside is that LSH-based methods may require multiple hash tables and can suffer from reduced accuracy or increased memory usage in high-dimensional settings.
 
-Graph-based indexing methods have demonstrated particularly strong empirical performance. In particular, the Hierarchical Navigable Small World (HNSW) graph organizes data points into a multi-layer structure that enables efficient navigation toward nearest neighbors through greedy search \cite{malkov2018efficientrobustapproximatenearest}. Due to its balance between efficiency and accuracy, HNSW has become a widely adopted method in modern vector search systems. To further improve scalability to very large datasets, including those stored on disk, systems such as DiskANN extend graph-based approaches by optimizing data layout and access patterns for disk-based storage \cite{subramanya2019diskann}. These methods enable efficient nearest neighbor search over billion-scale datasets while maintaining high accuracy.
+Graph-based indexing methods have demonstrated particularly strong empirical performance. In particular, the Hierarchical Navigable Small World (HNSW) graph arranges data points in a multi-layer structure and uses greedy search to quickly reach nearest neighbors \cite{malkov2018efficientrobustapproximatenearest}. Due to its strong balance between efficiency and accuracy, HNSW has become widely adopted in modern vector search systems, but it typically requires the entire index to reside in main memory. For larger, disk-resident datasets, approaches such as DiskANN instead rely on a single-layer graph (Vamana) that is better suited for disk-based access, avoiding the multi-layer traversal of HNSW and enabling efficient search at billion scale \cite{subramanya2019diskann}.
 
-In addition to classical ANN structures, recent work has explored how data structures for nearest neighbor search can themselves be discovered or learned from data \cite{salemohamed2024discoveringdatastructuresnearest}. Similarly, learning-based indexing approaches have been proposed in which a model is trained to predict or guide the partitioning of the vector space so that search can be performed more efficiently \cite{chiu2019learningindexnearestneighbor}. These approaches illustrate that ANN performance depends not only on the search algorithm, but also on how the underlying search structure is constructed.
+Recent work has also explored learning-based approaches, where models are used to guide how the search structure is built or traversed \cite{salemohamed2024discoveringdatastructuresnearest, chiu2019learningindexnearestneighbor}. Instead of relying only on manually designed heuristics, these methods learn from the data how to partition the vector space or which regions are more likely to contain relevant neighbors. This makes the search process more efficient and highlights that ANN performance depends not only on the search algorithm, but also on how the data is organized.
 
-In this thesis, ANN search is implemented using the FAISS library, a widely used system for efficient similarity search over high-dimensional vectors \cite{douze2025faisslibrary}. FAISS provides a unified framework that implements a variety of ANN techniques, including graph-based methods such as HNSW, as well as exact search for ground truth computation. Its scalability and performance make it a standard choice for large-scale vector search applications.
+In this thesis, ANN search is implemented using the FAISS library \cite{douze2025faisslibrary}. It provides a unified framework that implements a variety of ANN techniques, including graph-based methods such as HNSW, as well as exact search for ground truth computation.
 
 \subsection{Metrics for ANNS Evaluation}
 
-Approximate nearest neighbor methods trade exactness for efficiency, making it necessary to evaluate both retrieval quality and computational performance. As a result, ANN systems are typically assessed along two main dimensions: retrieval accuracy and resource usage \cite{johnson2017billionscalesimilaritysearchgpus, douze2025faisslibrary}.
+ANN systems are typically evaluated along three main dimensions: retrieval quality, query efficiency, and resource usage, reflecting the trade-offs inherent in approximate search \cite{johnson2017billionscalesimilaritysearchgpus, douze2025faisslibrary}.
 
 A primary measure of retrieval quality is \textit{recall@k}, which quantifies how many of the true nearest neighbors are retrieved by the approximate method. Let $R_k^*$ denote the set of the $k$ exact nearest neighbors and $R_k$ the set returned by the ANN method. Then:
 \[
 \text{recall@k} = \frac{|R_k \cap R_k^*|}{|R_k^*|}.
 \]
 
-More generally, $n$-recall@k is defined as the fraction of the top-$n$ ground truth nearest neighbors that appear in the top-$k$ approximate results, where $n \leq k$ \cite{douze2025faisslibrary}. A common setting is $n = k$, in which case the measure corresponds to the intersection between the exact and approximate result sets. When $n = k = 1$, recall@1 reduces to a binary indicator of whether the nearest neighbor was correctly retrieved, and is therefore equivalent to accuracy. For $k > 1$, however, recall@k measures the fraction of correctly retrieved neighbors and should not be confused with accuracy in the general classification sense.
+More generally, $n$-recall@k measures how many of the true nearest neighbors are successfully retrieved by the approximate method. Concretely, it is the fraction of the top-$n$ ground truth nearest neighbors that appear among the top-$k$ approximate results, where $n \leq k$ \cite{douze2025faisslibrary}. A common choice is $n = k$, in which case the metric reflects how well the approximate result set matches the exact one.
 
-It is worth noting that the definition of recall@k is not entirely consistent across the literature. In some works, recall@k refers to $1\text{-recall@k}$, while in others it corresponds to $k$-recall@k. In this thesis, we adopt the standard definition based on the fraction of correctly retrieved nearest neighbors.
+The definition of recall@k varies across the literature: some works use $1$-recall@k, focusing only on the nearest neighbor, while others use $k$-recall@k, which evaluates the retrieved set as a whole. In this thesis, we use the latter.
 
-In addition to retrieval accuracy, computational efficiency is a key metric. Query performance is typically measured in terms of latency (time per query) or throughput, often expressed as queries per second (QPS). These metrics capture the practical efficiency of ANN systems and are central to evaluating their scalability.
+Query efficiency is typically measured in terms of latency and throughput (queries per second, QPS). Latency captures the time required to answer a single query, while throughput reflects the number of queries that can be processed per unit time. Together, these metrics determine how well a system scales under different workloads.
 
-ANN methods also introduce additional resource considerations. These include memory usage for storing index structures, preprocessing or index construction time, and, in large-scale or disk-based systems, the number of input/output operations required during search \cite{douze2025faisslibrary}. For example, graph-based indexes require additional memory to store connectivity information, while compressed representations may reduce memory at the cost of reduced retrieval accuracy.
-
-Overall, ANN evaluation involves analyzing trade-offs between retrieval accuracy and resource usage. Algorithms are typically tuned to achieve an optimal balance, where high recall is maintained while minimizing query time and resource consumption.
-
-In this thesis, ANN methods are evaluated using recall@k to measure retrieval accuracy, and queries per second (QPS) and query latency to assess performance. Exact nearest neighbor search is used to compute ground truth results for comparison.
+Resource usage further influences these metrics, including memory consumption, index construction time, and, in disk-based settings, I/O cost during search \cite{douze2025faisslibrary}. For example, graph-based indexes require additional memory to store connectivity information, while compression techniques reduce memory usage at the cost of lower recall.
 
 \section{Filtered Vector Search}\label{sec:filtered-vector-search}
 
-Filtered vector search extends nearest neighbor search by combining similarity-based retrieval in an embedding space with structured filtering over associated attributes. Given a query vector and a predicate over metadata, the goal is to retrieve the nearest neighbors that satisfy the predicate. This setting arises naturally in modern applications, where retrieval must simultaneously account for semantic similarity and structured constraints.
+Let $(X, d)$ be a metric space, where $X \subseteq \mathbb{R}^d$ is a finite set of vectors and $d(\cdot,\cdot)$ is a distance function (e.g., Euclidean or cosine distance). Each vector $x \in X$ is associated with structured attributes $a(x) \in \mathcal{A}$, where $\mathcal{A}$ denotes the attribute space.
 
-The difficulty arises because the filter does not simply reduce the number of candidates; it changes the effective search domain. For a predicate \(p\), the query is evaluated over the subset \(X_p \subseteq X\) of vectors whose records satisfy \(p\), rather than over the full dataset. The geometry of \(X_p\) in the embedding space can differ significantly from that of \(X\): it may be dense and well connected, or sparse and fragmented. Consequently, vectors satisfying the predicate need not lie near the query, even when they are the only admissible answers \cite{acorn, labelsvectors}.
+A \emph{predicate} is a Boolean function
+\[
+p : \mathcal{A} \rightarrow \{0,1\},
+\]
+which defines a subset of vectors
+\[
+X_p := \{ x \in X \mid p(a(x)) = 1 \}.
+\]
 
-This makes filtered vector search inherently query-dependent. Each predicate induces a different subset \(X_p\), and therefore a different effective search space. Unlike standard nearest neighbor search, where a single index is built over a fixed distribution, filtered queries operate over many implicit subspaces defined at query time. These subspaces vary in size, density, and connectivity, which directly affects search behavior.
+Given a query vector $q \in \mathbb{R}^d$ and an integer $k$, the filtered $k$-nearest neighbor problem is to retrieve the $k$ closest vectors to $q$ among those that satisfy the predicate:
+\[
+R_k(q, p) = \text{top-}k \text{ elements of } X_p \text{ with respect to } d(q,\cdot).
+\]
 
-As a result, methods designed under assumptions about the global data distribution may behave inconsistently when applied to predicate-induced subsets. Existing literature reports inefficiencies, increased computational cost, and degraded retrieval quality when the filtered subset is poorly aligned with the structure of the embedding space \cite{nhq, caminal2025filtered}.
+\medskip
+The defining characteristic of filtered vector search is that the query is evaluated over the subset $X_p$, rather than over the full dataset $X$. That is, the search domain changes from $(X, d)$ to $(X_p, d)$. This restriction does not only reduce the number of candidate points; it changes the distribution and structure of the data on which the search is performed.
+
+Formally, if $\mu$ denotes the empirical distribution over $X$, then restricting to $X_p$ corresponds to conditioning on the predicate:
+\[
+\mu_p(x) = \mathbb{P}\big(x \mid p(a(x)) = 1\big).
+\]
+In general, $\mu_p$ can differ significantly from $\mu$. For instance, $X_p$ may be much smaller, unevenly distributed, or composed of points that are far apart in the embedding space.
+
+In the full dataset $X$, the points closest to $q$ may not satisfy the predicate and be excluded from $X_p$. Thus, the nearest neighbors of $q$ within $X_p$ can be entirely different from the nearest neighbors in $X$.
+
+Each predicate $p$ defines therefore a different search problem. The subset $X_p$ can vary in size, distribution, and connectivity, and these variations determine how difficult the search is. As a result, filtered vector search is inherently \emph{query-dependent}: instead of operating on a single fixed dataset, the system must handle many different subsets defined at query time.
+
+This creates a fundamental challenge. Most NN methods are designed under assumptions about the global structure of $X$. When applied to a subset $X_p$ that does not follow the same structure, these methods may become inefficient or lose accuracy. \cite{acorn, labelsvectors, nhq, caminal2025filtered}.
 
 \subsection{Selectivity}\label{sec:selectivity}
 
-Selectivity is a fundamental concept in query processing that quantifies the fraction of the dataset satisfying a given predicate. Let \(X\) denote the dataset and \(p\) a predicate. The subset of elements satisfying \(p\) is defined as
-\[
-X_p = \{ x \in X \mid p(x) = \text{true} \}.
-\]
-The selectivity of \(p\) is then given by
+Selectivity is a fundamental concept in query processing that quantifies the fraction of a dataset satisfying a predicate. Given a dataset \(X\) and a predicate \(p\), the selectivity of \(p\) is defined as
 \[
 \text{sel}(p) = \frac{|X_p|}{|X|}.
 \]
-Selectivity is closely related to cardinality, which refers to the absolute number of matching elements, i.e., \(|X_p|\).
+The cardinality of \(p\) is given by \(|X_p|\).
 
-Cardinality estimation has been extensively studied in the database literature, as it plays a central role in query optimization \cite{lynch2001selectivity, lpbound}. Classical approaches often rely on simplifying assumptions such as attribute independence, where the selectivity of a conjunction of predicates is approximated as the product of their individual selectivities. While this assumption simplifies estimation, it can lead to significant errors when attributes are correlated, as it ignores dependencies between them \cite{taskar2001, lpbound}. Query planners rely on these estimates, together with other statistics such as histograms or sampling-based summaries, to choose efficient execution strategies. Inaccurate estimates can propagate through the planning process, leading to suboptimal decisions.
+Cardinality estimation has been extensively studied in the database literature due to its central role in query optimization. Classical approaches often assume attribute independence, approximating the selectivity of a conjunction of predicates as the product of their individual selectivities. While computationally convenient, this assumption can lead to large estimation errors in the presence of correlated attributes \cite{taskar2001}. Such estimates, combined with statistics such as histograms or samples, are used by query planners to select execution strategies, and inaccuracies can lead to suboptimal plans \cite{lynch2001selectivity, lpbound}.
 
-In filtered vector search, selectivity directly determines the size of the admissible search space. Given a query vector \(q\), retrieval is performed over the restricted domain \(X_p\) rather than the full dataset \(X\). When \(\text{sel}(p)\) is high, the search space remains large and resembles the original dataset. When \(\text{sel}(p)\) is low, the search is restricted to a small subset, which can significantly reduce the number of candidate vectors but also increase the difficulty of finding relevant neighbors. In particular, if \(|X_p|\) is small, the nearest valid neighbors may lie far from the query in the embedding space, requiring more extensive exploration.
+In filtered vector search, selectivity determines the size of the candidate set. For high selectivity, \(|X_p|\) remains large and the search space closely resembles the full dataset. For low selectivity, \(|X_p|\) is small, reducing the number of candidates but restricting the available neighbors.
 
-However, selectivity alone does not fully characterize query difficulty. Two predicates \(p_1\) and \(p_2\) with \(\text{sel}(p_1) = \text{sel}(p_2)\) may induce subsets \(X_{p_1}\) and \(X_{p_2}\) with very different structures in the embedding space, leading to different retrieval behavior. In this thesis, we therefore evaluate queries across different selectivity levels while focusing on the effect of attribute–embedding correlation.
+However, selectivity alone does not fully characterize query difficulty. Two predicates \(p_1, p_2\) with \(\text{sel}(p_1) = \text{sel}(p_2)\) may induce subsets \(X_{p_1}\) and \(X_{p_2}\) with very different structures in the embedding space, leading to different retrieval behavior. In this thesis, we therefore study queries across varying selectivity levels while explicitly accounting for attribute--embedding correlation.
 
 \subsection{Correlation}\label{sec:correlation}
 
-As discussed above, selectivity alone does not fully characterize the difficulty of filtered vector search. In addition to the size of the admissible set \(X_p\), performance also depends on how the predicate-induced subset is arranged in the embedding space relative to the query.
-
-Let
-\[
-X = \{x_1,\dots,x_n\} \subset \mathbb{R}^d
-\]
-be the set of embeddings, let \(p\) be a predicate, and let
-\[
-X_p = \{x \in X \mid p(x)=\text{true}\}
-\]
-denote the subset of vectors satisfying \(p\). For a query vector \(q \in \mathbb{R}^d\), filtered vector search seeks the \(k\) nearest neighbors of \(q\) within \(X_p\).
+In addition to the size of the admissible set \(X_p\), performance also depends on how the predicate-induced subset is arranged in the embedding space relative to the query.
 
 To formalize the interaction between the predicate and the embedding space, define
 \[
@@ -139,46 +142,39 @@ This distinction is fundamental for filtered vector search. Two predicates may h
 \]
 while inducing very different values of \(C(q,p)\). In that case, the two queries have the same number of admissible vectors but differ substantially in geometric difficulty. Correlation therefore captures an aspect of filtered vector search that selectivity alone cannot express.
 
-Correlation therefore captures a fundamental aspect of filtered vector search that selectivity alone cannot express. In this thesis, we develop a practical method to estimate this quantity efficiently.
+In this thesis, we develop a practical method to estimate this quantity efficiently.
 
 \section{Execution Strategies}\label{sec:execution-strategies}
 
-Execution strategies for filtered vector search define how structured filter predicates are combined with nearest neighbor search.
-
-The main difference between execution strategies is when and how the filter is applied in relation to the search process. This design choice directly affects performance, efficiency, and result quality.
-
-Formally, given a dataset \( D \subset \mathbb{R}^d \) and a Boolean filter predicate \( \phi \), the goal is to compute the top-\(k\) nearest neighbors of a query vector \( q \in \mathbb{R}^d \) restricted to the subset
-\[
-D_\phi = \{ x \in D \mid \phi(x) = \text{true} \}.
-\]
+Execution strategies define how structured filter predicates are combined with nearest neighbor search. The main difference between them is when and how the filter is applied in relation to the search process. This design choice directly affects performance, efficiency, and result quality.
 
 In this thesis, we focus on three main execution strategies.
 
 \subsection{Pre-filtering}\label{sec:pre-filtering}
 
-In pre-filtering, the filter predicate is evaluated first, producing the subset \( D_\phi \). The nearest neighbor search is then executed exclusively on this subset.
+Let \( D \) be a dataset of vectors and \( \phi \) a predicate. Pre-filtering first evaluates the predicate and constructs the subset
+\[
+D_\phi = \{ x \in D \mid \phi(x) \}.
+\]
+Nearest neighbor search is then performed only over \( D_\phi \).
 
-This approach guarantees that all returned results satisfy the filter and directly focuses the search on the relevant candidates. However, most vector indexes are designed for the full dataset, so we cannot use them for dynamically restricted subsets. As a result, their effectiveness may degrade, particularly for filters which induce a big subset (high selectivity), since we have to compute NN search on many vectors, and that's very expensive with no indexes.
+This guarantees that all returned results satisfy the predicate. However, standard vector indexes are built over the full dataset \( D \) and cannot be directly restricted to arbitrary subsets \( D_\phi \). In practice, this often means scanning all vectors in \( D_\phi \) and computing distances explicitly, with cost proportional to \( |D_\phi| \). When selectivity is high (\( |D_\phi| \approx |D| \)), the cost is close to a full scan of the dataset.
 
 \subsection{Post-filtering}\label{sec:post-filtering}
 
-In post-filtering, the nearest neighbor search is performed over the entire dataset without considering the filter predicate. The filter is applied only after retrieving a set of candidate neighbors.
+Post-filtering performs nearest neighbor search over \( D \), ignoring the predicate. Let \( C_k \subseteq D \) denote the top-\(k\) retrieved candidates. The predicate is then applied to \( C_k \), and only elements satisfying \( \phi \) are kept.
 
-This allows the index to operate under its optimal conditions. However, it does not guarantee that \(k\) valid results are returned. If many retrieved neighbors do not satisfy the filter, additional candidates must be examined, increasing query cost and potentially affecting efficiency.
+This allows the index to operate normally, but it does not guarantee that \(k\) valid results are obtained. If only a fraction \( \text{sel}(\phi) \) of the dataset satisfies the predicate, the expected number of valid results in \( C_k \) is approximately \( k \cdot \text{sel}(\phi) \). If this number is less than \(k\), additional candidates must be retrieved, increasing the total number of distance evaluations.
 
 \subsection{Inline Filtering}\label{sec:inline-filtering}
 
-Inline filtering incorporates the filter predicate directly into the search procedure. During index traversal, candidates that do not satisfy the filter are pruned, and only valid vectors are considered for distance evaluation and result construction.
+Inline filtering incorporates the predicate into the search itself, so that it directly constrains which nodes are explored. Instead of constructing \( D_\phi \) in advance (pre-filtering) or discarding invalid results after retrieval (post-filtering), the constraint is enforced during traversal.
 
-This approach avoids materializing the filtered subset (as in pre-filtering) and reduces wasted work on invalid candidates (as in post-filtering). However, it requires index structures and search algorithms that support predicate-aware traversal, which increases implementation complexity.
+In graph-based indexes, this amounts to searching over the subgraph induced by the predicate, i.e., nodes \( x \in D \) such that \( \phi(x) \) holds. A key challenge is that this subgraph is typically not well connected, which can prevent the search from reaching relevant parts of the space.
 
+ACORN \cite{acorn} addresses this by maintaining connectivity under filtering. At query time, it begins from the standard HNSW entry point and performs greedy routing until it reaches a node satisfying the predicate. From there, the search proceeds only through nodes that satisfy the predicate, with filtering applied to neighbor expansions at each step.
 
-\section{Research Gap}\label{sec:research-gap}
+To support this restricted traversal, ACORN provides two variants. ACORN-\(\gamma\) increases connectivity at index construction time by expanding each node’s neighborhood by a factor \(\gamma\), followed by pruning to control index size. This pruning is \emph{predicate-agnostic}, i.e., based solely on standard distance-based heuristics and independent of any predicate, ensuring that the index remains general-purpose while improving connectivity for arbitrary filters. In contrast, ACORN-1 leaves the index unchanged and performs additional neighbor exploration dynamically at query time.
 
-Filtered vector search systems often exploit dependencies within the data to improve performance, for example in selectivity estimation \cite{corrbound}, index construction, or query execution \cite{acorn}. In these settings, such relationships play an important role in guiding system behavior and improving efficiency.
+In this thesis, ACORN serves as the representative inline filtering method.
 
-In this thesis, we adopt a more general and systematic perspective on modeling these dependencies. Rather than incorporating them implicitly within a specific method, we treat them as a standalone property of the data and derive a quantitative measure based on database statistics. This measure captures the interaction between filter predicates and the underlying vector distribution, enabling a more principled analysis of how filtering affects nearest neighbor search.
-
-A key aspect of our approach is that the proposed formulation is independent of any particular index structure or execution strategy. It can therefore be used as a generic component and integrated into existing systems without requiring substantial modifications. This makes it applicable across a wide range of filtered vector search settings, including both exact and approximate methods.
-
-By introducing a reusable and system-agnostic characterization of these dependencies, this thesis facilitates the development of methods that can incorporate such information in a modular way. Rather than targeting a single specialized solution, we provide a general abstraction that can be leveraged to improve different aspects of filtered vector search, including query planning, candidate selection, and execution strategy design.
