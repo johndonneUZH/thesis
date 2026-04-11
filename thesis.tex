@@ -1,5 +1,6 @@
 ﻿\documentclass{uzh_spins_thesis}
 \usepackage{amssymb}
+\usepackage{graphicx}
 \usepackage{amsmath}
  \thesisType{Bachelor Thesis}
  \date{\today}
@@ -30,8 +31,9 @@
  \include{chapters/00_acknowledgements/00_acknowledgements}
  
  \include{chapters/00_abstract/00_abstract}
- 
- \tableofcontents
+
+ % Tighten spacing only inside the table of contents.
+ {\setlength{\parskip}{0pt}\tableofcontents}
  \mainmatter
  \include{chapters/01_introduction/01_introduction}
  \include{chapters/02_background/02_background}
