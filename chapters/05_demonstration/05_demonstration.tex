@@ -1,6 +1,482 @@
 \chapter{Correlation Metric}
-\section{Local vs Global Attribute Distributions}
-\section{Cluster-based Approximation}
-\section{Jensen–Shannon Divergence}
-\section{Lift (range alignment)}
-\section{Combined Score \& Interpretation}\label{chap:correlation-metric}
+Our metric captures two aspects simultaneously: (i) how different the query-local attribute distribution is from the global dataset distribution, and (ii) whether the queried filter range is locally enriched or depleted.
+
+Formally, let \(X = \{x_1,\dots,x_N\} \subseteq \mathbb{R}^d\) be the dataset of embedding vectors, and let each vector \(x_i\) be associated with a scalar attribute \(a_i\). 
+Given a query vector \(q \in \mathbb{R}^d\) and a filter range \([L,U]\), we seek to determine whether values in \([L,U]\) are more likely in the neighborhood of \(q\) than in the dataset as a whole.
+
+\section{Precomputed statistics}
+We precompute three components: 
+
+\subsection{Cluster centroids.}
+Let \(\ell_i \in \{1,\dots,k\}\) denote the cluster assignment of vector \(x_i\). 
+For each cluster \(c\), define
+\[
+C_c = \{ i \mid \ell_i = c \}.
+\]
+The centroid is reconstructed as
+\[
+c_c = \frac{1}{|C_c|} \sum_{i \in C_c} x_i.
+\]
+
+\subsection{Attribute distributions.}
+We estimate both global and cluster-local attribute distributions using histogram-based density estimation over the scalar attribute \(a_i\).
+
+\textbf{Bin construction.}
+The number of histogram bins $M$ is determined adaptively from the data.
+We begin by estimating the bin width using the Freedman--Diaconis rule,
+\[
+h = \frac{2 \cdot \mathrm{IQR}}{n^{1/3}},
+\]
+where $\mathrm{IQR}$ is the interquartile range of the attribute values and $n$
+is the number of samples. Given the data range $[v_{\min}, v_{\max}]$, this
+yields the bin-count estimate
+\[
+\widehat{M} = \left\lceil \frac{v_{\max} - v_{\min}}{h} \right\rceil.
+\]
+When the interquartile range is too small (i.e., the data is nearly constant),
+this estimate becomes unreliable, and we instead fall back to a heuristic based
+on a target number of samples per bin.
+
+To keep the number of bins reasonable, we force it to stay within a fixed range:
+\[
+M = \min\!\bigl(M_{\max},\, \max(M_{\min},\, \widehat{M})\bigr).
+\]
+This way, the histogram is neither too rough (losing detail) nor too detailed
+(with many empty bins that make the results unreliable).
+
+In our implementation, we fix $M_{\min} = 20$ and $M_{\max} = 200$. Since the
+dataset characteristics are known, these bounds are
+sufficient and yield stable results in practice.
+
+More generally, these bounds can be defined in a data-dependent manner. For
+example, letting $u$ denote the number of distinct attribute values, one may use
+\[
+M_{\min} = \min\!\left(u,\, \max\!\left(5, \left\lfloor n^{1/3} \right\rfloor \right)\right),
+\qquad
+M_{\max} = \min\!\left(u,\, \left\lfloor \frac{n}{m_{\min}} \right\rfloor \right),
+\]
+where $m_{\min}$ is the minimum desired number of samples per bin. Such choices
+adapt the binning resolution to both dataset size and attribute cardinality.
+
+\textbf{Global distribution.}
+Given bin edges \(b_0 < b_1 < \dots < b_M\), we first compute a histogram over
+the full dataset:
+\[
+H_{\mathrm{global}}(j)
+=
+\left|
+\{\, i \mid a_i \in [b_j, b_{j+1}) \,\}
+\right|,
+\qquad j=0,\dots,M-1.
+\]
+
+We then convert this histogram into a probability distribution. To avoid zero
+probabilities, we apply additive smoothing by adding a small constant
+\(\varepsilon > 0\) to each bin:
+\[
+P_{\mathrm{global}}(j)
+=
+\frac{H_{\mathrm{global}}(j) + \varepsilon}
+{\sum_{k=0}^{M-1} \bigl(H_{\mathrm{global}}(k) + \varepsilon\bigr)}.
+\]
+This ensures that no bin has zero probability.
+Without smoothing, bins with zero counts would lead to undefined or unstable
+values in downstream computations (e.g., divisions or logarithms in divergence
+measures).
+
+After smoothing, the histogram no longer sums to one, so we renormalize it.
+We simply rescale all values so that they form a valid probability
+distribution again:
+\[
+\sum_j P_{\mathrm{global}}(j) = 1.
+\]
+
+The corresponding cumulative distribution function is
+\[
+\mathrm{CDF}_{\mathrm{global}}(j)
+=
+\sum_{k=0}^{j} P_{\mathrm{global}}(k).
+\]
+
+\textbf{Cluster-local distributions.}
+For each cluster \(c\), we first compute its radius
+\[
+r_c = \max_{i \in C_c} \|x_i - c_c\|_2.
+\]
+We then introduce a \textbf{scaling parameter} \(\lambda \ge 1\) to slightly enlarge the
+cluster and define the set of selected points
+\[
+C'_c = \{\, i \in C_c \mid \|x_i - c_c\|_2 \le \lambda r_c \,\}.
+\]
+This allows us to include points near the boundary of the cluster, making the
+estimate more robust. The choice and effect of \(\lambda\) are discussed in
+Section~\ref{subsec:radius-expansion}.
+
+Using these points, we estimate the cluster-level attribute distribution by
+constructing a histogram over the same bins:
+\[
+H_c(j)
+=
+\left|
+\{\, i \in C'_c \mid a_i \in [b_j, b_{j+1}) \,\}
+\right|,
+\qquad j=0,\dots,M-1,
+\]
+which corresponds to the empirical distribution
+\[
+P_c(a) = \frac{1}{|C'_c|} \sum_{i \in C'_c} \mathbf{1}[a_i \in \text{bin}(a)].
+\]
+We then convert it into a probability distribution by applying additive
+smoothing and renormalization, as in the global case:
+\[
+P_c(j)
+=
+\frac{H_c(j) + \varepsilon}
+{\sum_{k=0}^{M-1} \bigl(H_c(k) + \varepsilon\bigr)}.
+\]
+Finally, the cumulative distribution function is computed analogously:
+\[
+\mathrm{CDF}_c(j)
+=
+\sum_{k=0}^{j} P_c(k).
+\]
+
+\paragraph{Query-conditional distribution.}
+We consider the \emph{query-conditional attribute distribution}
+\(P(a \mid x)\), which describes the distribution of attribute values in the
+neighborhood of a point \(x \in \mathbb{R}^d\). Intuitively, it captures how
+attribute values are distributed among vectors that are similar to \(x\) in the
+embedding space.
+
+Estimating \(P(a \mid x)\) directly is challenging, as it requires defining a
+local neighborhood around each query and computing a distribution from a
+potentially small number of samples. Instead, we approximate the mapping
+\[
+x \mapsto P(a \mid x)
+\]
+by assigning a single distribution \(P_c(a)\) to each cluster:
+\[
+x \mapsto P_c(a), \quad \text{for } x \in R_c,
+\]
+where \(R_c\) denotes the region associated with cluster \(c\). This avoids
+estimating a separate distribution for every query location, which would be
+both computationally expensive and statistically unreliable.
+
+\paragraph{Distributions and estimation.}
+We distinguish between three distributions. 
+
+The conditional distribution
+\(P(a \mid x)\) is defined at the point level. 
+
+At the cluster level, we
+introduce an ideal (population-level) distribution \(P_c(a)\), which we define
+as the average of the conditional distributions over the region \(R_c\):
+\[
+P_c(a) = \mathbb{E}_{x' \sim \mathrm{Unif}(R_c)}[P(a \mid x')].
+\]
+This provides a clean abstraction of the attribute distribution associated
+with the cluster.
+
+In practice, this distribution is not directly observable and is instead
+estimated empirically using a histogram over the points in the cluster:
+\[
+\hat{P}_c(a) = \frac{1}{n_c} \sum_{i \in C'_c} \mathbf{1}[a_i \in \text{bin}(a)].
+\]
+
+\subsection{Query-to-cluster mapping.}
+Given a query \(q \in \mathbb{R}^d\), we associate it with a representative
+region of the dataset by assigning it to its nearest centroid. To this end, we
+construct an index over the set of centroids \(\{c_1, \dots, c_k\}\) and define
+\[
+c^*(q) = \arg\min_c \|q - c_c\|_2.
+\]
+This induces a partition of the vector space into Voronoi regions and assigns
+each query to the cluster whose centroid is closest to it.
+
+To estimate the attribute distribution in the vicinity of \(q\), we use the
+empirical distribution of its assigned cluster, given by the histogram-based
+estimate computed in the previous section. 
+\[
+P(a \mid q) \approx P_{c^*(q)}(a),
+\]
+where \(P_{c^*(q)}\) denotes the attribute distribution associated with the
+cluster \(c^*(q)\). 
+
+\section{Approximation quality}\label{sec:approximation-quality}
+We now analyze how well the cluster-based approximation
+\[
+P(a \mid q) \approx P_c(a)
+\]
+captures the true query-conditional distribution.
+
+\paragraph{Smoothness assumption}
+We assume that attribute distributions are correlated with the underlying
+vector space geometry, meaning that nearby points exhibit similar attribute
+behavior. 
+
+Formally, we assume a \emph{Lipschitz continuity} condition: there exists a
+constant \(L > 0\) such that
+\[
+D(P(a \mid x), P(a \mid x')) \le L \|x - x'\|
+\]
+for all \(x, x' \in \mathbb{R}^d\), where \(D(\cdot,\cdot)\) measures the
+difference between two distributions.
+
+This means that the change in the attribute distribution is proportional to the
+distance between points: small movements in the embedding space lead to small
+changes in the distribution, while large differences can only occur between
+points that are far apart.
+
+\subsection{Bounding the approximation error}
+
+For a point \(x \in R_c\), the approximation error is
+\[
+D(P(a \mid x), P_c(a)),
+\]
+where \(D(\cdot,\cdot)\) is a divergence between distributions.
+
+Recall that we define the ideal cluster-level distribution as the average of
+the conditional distributions over the region \(R_c\), i.e., \(P_c(a)\) is the
+average of \(\{P(a \mid x') : x' \in R_c\}\).
+
+We now bound the deviation between \(P(a \mid x)\) and this average. Since
+\(P_c(a)\) is an average over these distributions, its distance to
+\(P(a \mid x)\) can be bounded by the largest deviation within the cluster:
+\[
+D(P(a \mid x), P_c(a))
+\le
+\sup_{x' \in R_c} D(P(a \mid x), P(a \mid x')).
+\]
+
+Applying the smoothness assumption gives:
+\[
+D(P(a \mid x), P_c(a))
+\le
+\sup_{x' \in R_c} D(P(a \mid x), P(a \mid x'))
+\]
+\[
+D(P(a \mid x), P_c(a))
+\le
+\sup_{x' \in R_c} L \|x - x'\|
+\]
+\[
+D(P(a \mid x), P_c(a))
+\le
+L \sup_{x' \in R_c} \|x - x'\|.
+\]
+
+Taking the supremum over all \(x \in R_c\) yields:
+\[
+\sup_{x \in R_c} D(P(a \mid x), P_c(a))
+\le
+L \sup_{x,x' \in R_c} \|x - x'\|.
+\]
+
+\paragraph{Cluster diameter.}
+We define the diameter of a cluster \(R_c\) as
+\[
+\mathrm{diam}(R_c) = \sup_{x,x' \in R_c} \|x - x'\|.
+\]
+Substituting this into the previous bound yields
+\[
+\sup_{x \in R_c} D(P(a \mid x), P_c(a))
+\le
+L \, \mathrm{diam}(R_c).
+\]
+
+
+\subsection{Error decomposition}
+
+The proposed approximation introduces two main sources of error. 
+
+The first is the quantization (approximation) error,
+\[
+P(a \mid x) \;\;\text{vs}\;\; P_c(a),
+\]
+which arises from replacing the pointwise conditional distribution with a
+cluster-level approximation. 
+
+The second is the estimation error,
+\[
+P_c(a) \;\;\text{vs}\;\; \hat{P}_c(a),
+\]
+which is introduced when estimating the cluster-level distribution from a
+finite number of samples using a histogram.
+
+\subsubsection{Quantization error (Geometric Discretization).}
+For a query assigned to cluster \(c\), we define the worst-case approximation
+error as
+\[
+\varepsilon_{\mathrm{quant}}(q)
+=
+\sup_{x \in R_c} D(P(a \mid x), P_c(a)),
+\]
+where \(D(\cdot,\cdot)\) is a divergence between distributions (e.g., total
+variation or Jensen--Shannon). This measures the error introduced by replacing
+the pointwise distribution \(P(a \mid x)\) with a single cluster-level
+distribution.
+
+From the previous bound, this error satisfies
+\[
+\varepsilon_{\mathrm{quant}}(q)
+\le
+L \, \mathrm{diam}(R_c),
+\]
+where \(\mathrm{diam}(R_c)\) is the cluster diameter and \(L\) is the smoothness
+constant. Thus, the approximation error increases with the size of the cluster
+and with how rapidly the distribution changes in the embedding space.
+
+However, this bound is worst-case and does not fully reflect practical behavior.
+In particular, the error also depends on how the geometry of the cluster aligns
+with the structure of \(P(a \mid x)\).
+
+\paragraph{Refinements beyond diameter.}
+Three factors are particularly important:
+
+\emph{Cluster anisotropy.}
+The diameter only captures the maximum pairwise distance, but ignores the shape
+of the cluster. As a result, clusters can be anisotropic (e.g., elongated or
+skewed).
+
+Even if most points are close to the centroid, an elongated cluster can still
+contain points that are far apart. Along the short axis, points are very
+similar, while along the long axis, points may differ significantly. Thus, two
+points in the same cluster can have very different attribute distributions
+despite being assigned the same \(P_c(a)\).
+
+\emph{Alignment with distribution gradients.}
+Think of \(P(a \mid x)\) as assigning, to every point \(x\) in the embedding
+space, a full distribution over attribute values:
+\[
+x \mapsto P(a \mid x).
+\]
+If we fix a location \(x\) and look at vectors near \(x\), the
+attribute values of those vectors follow a distribution \(P(a \mid x)\). Moving
+to a different point \(x'\) may change this distribution. Thus, as we move
+through the embedding space, we can think of the attribute distribution as
+evolving over space.
+
+\textit{Case 1: Good alignment (low error).}
+If a cluster lies within a region where this distribution changes little, then
+for any two points \(x, x' \in R_c\), we have \(P(a \mid x) \approx P(a \mid x')\).
+In this case, all points in the cluster exhibit similar attribute behavior, and
+using a single distribution \(P_c(a)\) is a good approximation.
+
+\textit{Case 2: Poor alignment (high error).}
+If a cluster spans a region where the distribution changes significantly, then
+points within the cluster may have very different attribute distributions.
+However, the model still assigns a single \(P_c(a)\), which forces these
+different behaviors to be averaged together and introduces systematic bias.
+
+For example, suppose that in one region of the space the attributes are
+concentrated around 10, while in another region they are concentrated around
+100. If a cluster spans both regions, then \(P_c(a)\) mixes these two distinct
+distributions and fails to accurately represent either.
+
+\emph{Local curvature.}
+Finally, the smoothness assumption only captures first-order (linear) variation.
+If \(P(a \mid x)\) varies nonlinearly, the Lipschitz bound may underestimate the
+true variation within the cluster. As a result, even clusters with small
+diameter can incur non-negligible approximation error.
+
+\subsubsection{Estimation error (Statistical Estimation).}
+Recall the ideal (population-level) definition of the cluster distribution:
+\[
+P_c(a) = \mathbb{E}_{x' \in R_c}[P(a \mid x')].
+\]
+This represents the true cluster-level distribution, which is not directly
+observable.
+
+In practice, we estimate this distribution empirically using a histogram over
+the points in the cluster:
+\[
+\hat{P}_c(a) = \frac{1}{n_c} \sum_{i \in C'_c} \mathbf{1}[a_i \in \text{bin}(a)],
+\]
+where \(n_c = |C'_c|\) is the number of samples in the cluster. This estimator
+relies on discretizing the attribute values into bins.
+
+The estimation error is defined as
+\[
+\varepsilon_{\mathrm{est}}(c)
+=
+D(\hat{P}_c(a), P_c(a)),
+\]
+which measures the deviation between the empirical estimate and the true
+cluster-level distribution. This error arises from several sources:
+
+\emph{Finite sampling noise (variance).}
+We estimate the distribution using a finite number of samples, which introduces
+sampling noise that decreases with the sample size:
+\[
+\varepsilon_{\mathrm{est}}(c) \sim \mathcal{O}\!\left(\frac{1}{\sqrt{n_c}}\right).
+\]
+This scaling corresponds to the standard deviation of empirical estimates. Thus, large clusters yield more
+stable estimates, while small clusters produce noisy distributions.
+
+\emph{Histogram discretization (bias).}
+We do not estimate the full distribution, but a binned version
+\(P_c(a) \approx P_c(\text{bin}(a))\).
+As a result, fine structure within bins is lost and values near bin boundaries
+may be distorted. This introduces systematic bias, as the resolution of the
+distribution is reduced.
+
+\emph{Interaction with cluster size.}
+Small clusters have few samples (\(n_c\)), leading to high variance and unstable
+estimates of \(P_c(a)\). Large clusters have more samples and therefore lower
+variance, but tend to cover more heterogeneous regions, which increases the
+approximation error.
+
+\subsection{Bias--variance trade-off}
+
+The proposed method introduces a trade-off between approximation
+(quantization) error and estimation error. This trade-off is controlled by two
+parameters: the number of clusters \(k\) and the radius expansion parameter
+\(\lambda\).
+
+\subsubsection{Effect of the number of clusters \(k\).}
+
+The number of clusters \(k\) determines the granularity of the partition of the
+embedding space.
+
+Increasing \(k\) reduces the cluster diameter, leading to lower quantization
+error, but also reduces the number of samples per cluster, resulting in higher
+estimation error.
+
+Decreasing \(k\) increases the cluster diameter, leading to higher
+quantization error, but increases the number of samples per cluster, resulting
+in lower estimation error.
+
+\subsubsection{Effect of radius expansion \(\lambda\).}\label{subsec:radius-expansion}
+
+In addition to clustering, we can expand each cluster region using a parameter
+\(\lambda > 1\). We define the expanded region
+\[
+r'_c = \lambda \, r_c, \quad
+R'_c = \{ x : \|x - c_c\| \le r'_c \}.
+\]
+
+The diameter of the expanded region satisfies
+\[
+\mathrm{diam}(R'_c) = \sup_{x,x' \in R'_c} \|x - x'\|.
+\]
+Using the triangle inequality,
+\[
+\|x - x'\| \le \|x - c_c\| + \|x' - c_c\| \le r'_c + r'_c = 2r'_c,
+\]
+which implies
+\[
+\mathrm{diam}(R'_c) \le 2 r'_c = 2 \lambda r_c.
+\]
+
+Thus, \(\lambda\) directly controls an upper bound on the cluster diameter, and
+consequently the quantization error.
+
+Increasing \(\lambda\) enlarges the effective region \(R'_c\), increasing the
+diameter (and thus the potential quantization error), while also increasing the
+number of samples \(n_c\), which reduces estimation variance. Decreasing
+\(\lambda\) has the opposite effect: it reduces the diameter and quantization
+error, but also reduces the sample size, increasing estimation variance.
+
+Overall, \(\lambda\) acts as a regularization parameter, trading off geometric
+fidelity against statistical stability by controlling the spatial extent over
+which the conditional distribution is assumed constant.

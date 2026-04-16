@@ -1,200 +1,356 @@
 \chapter{Dataset Construction}\label{chap:dataset-construction}
+
 \section{Design Goals}
 
-Our goal is to construct synthetic structured attributes that are going to be later used in our experiments. We generate two types of attributes: (i) correlated attributes, which are explicitly coupled to the geometry of the vector space, and (ii) uncorrelated attributes, which serve as a random baseline.
+Our goal is to construct synthetic structured attributes that will later be used in our experiments. We generate two types of attributes: (i) correlated attributes, which are explicitly coupled to the geometry of the vector space, and (ii) uncorrelated attributes, which serve as a random baseline.
 
 All attributes are defined over a bounded discrete domain:
 \[
-\mathcal{A} = \{0, 1, \dots, 200\}.
+\mathcal{A} = \{0, \dots, 200\}.
 \]
-
-\paragraph{Uncorrelated Attributes}
-
-In contrast, uncorrelated attributes are generated independently of the vector space. Each vector is assigned a value uniformly at random from $\mathcal{A}$. This removes any relationship between vector similarity and attribute similarity and serves as a baseline to evaluate the effect of correlation.
 
 \section{Correlated Attribute Generation}
 
 We aim to enforce a strong relationship between vector similarity and attribute similarity, i.e., vectors that are close in the embedding space should receive similar attribute values.
 
-To achieve this, we construct attributes that vary smoothly over the vector space. We first group similar vectors into clusters and assign each cluster a scalar value, which is then smoothly interpolated to all vectors. 
-
-This results in attribute values that are consistent within local regions and change gradually across the space, without sharp cluster boundaries.
+To achieve this, we construct a smooth attribute function over the vector space. We first group vectors into clusters, assign scalar values to the cluster centroids, and then interpolate these values to all vectors using a Gaussian kernel. This results in an attribute function that is locally consistent and varies smoothly across the space.
 
 \subsection{Clustering}
 
 Let $\{x_i\}_{i=1}^N \subset \mathbb{R}^d$ denote the set of base vectors.
 
-To capture the geometric structure of the vector space, we first partition the dataset using clustering. Specifically, we apply MiniBatch $k$-means to obtain $k$ cluster centroids:
+We partition the dataset using MiniBatch $k$-means to obtain $k$ cluster centroids:
 \[
 \{c_j\}_{j=1}^k.
 \]
 
-These centroids serve as representative points that summarize the global distribution of the data.
+In practice, we choose the number of clusters proportional to the square root of the dataset size, i.e., $k \approx \sqrt{N}$, which provides a balance between representational fidelity and computational efficiency.
+
+These centroids serve as representative points of the data distribution.
 
 \subsection{Cluster Anchors}
-To induce a structured signal over the clusters, we assign each centroid a scalar anchor value.
-Rather than relying on the arbitrary ordering induced by $k$-means, we first order the centroids
-according to their projection onto the first principal component (PC1).
 
-Let $\pi$ denote the permutation that sorts centroids along PC1. We then define:
+To each centroid $c_j$, we assign a scalar anchor value
 \[
-v_j = \frac{j-1}{k-1}, \quad j \in \{1, \dots, k\},
+v_j = \frac{j-1}{k-1}, \quad j \in \{1,\dots,k\},
 \]
-where $c_j$ follows this ordering.
+for $k > 1$, resulting in values uniformly spaced over $[0,1]$. In the degenerate case $k=1$, we assign $v_1 = 0$.
 
-This ensures that nearby centroids in the embedding space receive similar anchor values,
-preserving global geometric consistency.
+These anchors define the values of the attribute function at the centroid locations and act as reference values for the subsequent interpolation step.
+
+\medskip
+
+\noindent
+\textit{Note that this anchor assignment is index-based rather than geometry-aware: centroid values are uniformly spaced according to centroid index, not according to their position in the embedding space. Geometric coupling is introduced later through Gaussian interpolation from the centroids to the data points.}
 
 \subsection{Gaussian Weighting}
 
-For each vector $x_i$, we compute its squared Euclidean distance to all centroids:
+For each vector $x_i$, we compute its Euclidean distance to all centroids:
 \[
-d_{ij} = \|x_i - c_j\|^2.
+d_{ij} = \|x_i - c_j\|.
 \]
 
 We then define soft assignment weights using a Gaussian kernel:
 \[
-w_{ij} = \exp\left(-\frac{d_{ij}}{2\sigma^2}\right).
+w_{ij} = \exp\left(-\frac{d_{ij}^2}{2\sigma^2}\right).
 \]
 
-\paragraph{Bandwidth Parameter}
+\paragraph{Radial Basis Function Interpretation}
 
-The parameter $\sigma > 0$ is referred to as the \emph{bandwidth} of the kernel. It controls how quickly the influence of a centroid decays as a function of distance.
+The Gaussian kernel used in our construction is an instance of a \emph{radial basis function} (RBF). In general, an RBF is a function that depends only on the distance between two points. Formally, it has the form
+\[
+\phi(x, c) = g(\|x - c\|),
+\]
+meaning that its value is determined solely by how far $x$ is from a center $c$, and not by the direction.
+
+In our case, we use the Gaussian RBF:
+\[
+K(x_i, c_j) = \exp\left(-\frac{\|x_i - c_j\|^2}{2\sigma^2}\right).
+\]
+
+This function assigns a high value when $x_i$ is close to $c_j$, and a value close to zero when $x_i$ is far away. The parameter $\sigma$ controls how quickly this influence decays with distance.
+
+Using this kernel, we will later define the continuous attribute value for each vector as
+\[
+a_i^{(\mathrm{cont})} =
+\frac{\sum_{j=1}^k K(x_i, c_j) v_j}{\sum_{j=1}^k K(x_i, c_j)}.
+\]
+
+This formula can be understood intuitively as follows: the attribute value of a vector $x_i$ is computed as a weighted average of the centroid anchor values $v_j$, where the weights depend on how close $x_i$ is to each centroid. Nearby centroids contribute strongly, while distant centroids contribute very little.
+
+\medskip
+
+This construction corresponds to a \emph{Nadaraya--Watson kernel regression estimator}. In general, given a set of points $\{z_j\}$ with associated values $\{y_j\}$, the Nadaraya--Watson estimator defines a function
+\[
+f(x) = \frac{\sum_j K(x, z_j)\, y_j}{\sum_j K(x, z_j)},
+\]
+which estimates the value at $x$ as a weighted average of nearby observations.
+
+This construction has several important properties:
+
+\begin{itemize}
+    \item \textbf{Smoothness:} Since the kernel is continuous, small changes in $x_i$ lead to small changes in $a_i^{(\mathrm{cont})}$.
+    
+    \item \textbf{Locality:} The attribute value is mainly influenced by nearby centroids, because distant centroids receive very small weights.
+    
+    \item \textbf{Geometry--metadata coupling:} If a vector lies close to a centroid $c_j$, then its attribute value will be close to the corresponding anchor value $v_j$.
+\end{itemize}
+
+\subsection{Bandwidth Parameter}
+
+The parameter $\sigma > 0$ is the \emph{bandwidth} of the Gaussian kernel. It controls how quickly the influence of a centroid decays as a function of distance.
 
 \begin{itemize}
     \item If $\sigma$ is small, only very close centroids receive significant weight, resulting in highly localized assignments.
-    \item If $\sigma$ is large, many centroids contribute similarly, leading to smoother but less discriminative assignments.
+    \item If $\sigma$ is large, many centroids contribute with similar weight, leading to smoother but less discriminative assignments.
 \end{itemize}
 
-Thus, $\sigma$ determines the scale at which the geometry of the space is observed and directly influences the strength of the induced correlation between vectors and attributes.
+Thus, $\sigma$ determines the geometric scale at which the vector space is observed and directly affects the strength of the induced correlation between vectors and attributes.
+
+In the implementation, the bandwidth is estimated from the data and optionally scaled by a constant factor $\texttt{sigma\_scale}$. The description here corresponds to the default setting $\texttt{sigma\_scale} = 1.0$, meaning that the estimated bandwidth is used directly without additional scaling.
 
 \paragraph{Bandwidth Estimation}
 
-A naive computation of $\sigma$ based on all pairwise distances $\|x_i - c_j\|$ would require $\mathcal{O}(|S|k)$ operations, which is computationally expensive for large-scale datasets.
+A naive computation of $\sigma$ from all point-to-centroid distances $\|x_i - c_j\|$ would require $\mathcal{O}(Nk)$ distance evaluations, which is computationally expensive for large-scale datasets.
 
-To address this, we estimate $\sigma$ using a random subsample. Let $S \subset \{1,\dots,N\}$ be a uniformly sampled subset with $|S| = \min(10^4, N)$. We define:
+To reduce this cost, we estimate $\sigma$ using a random subsample. Let $S \subset \{1,\dots,N\}$ be a uniformly sampled subset with $|S| = \min(10^4, N)$. We define:
 \[
-\sigma = \operatorname{median}\left(\{ \|x_i - c_j\| : i \in S, \; j \in \{1,\dots,k\} \}\right).
+\sigma = \operatorname{median}\left(\{ \|x_i - c_j\| : i \in S,\; j \in \{1,\dots,k\} \}\right).
 \]
+
+This provides a robust and computationally efficient estimate of the characteristic distance scale.
 
 \paragraph{Why the Median?}
 
-We use the median of the sampled distances to estimate $\sigma$ instead of the mean in order to obtain a robust estimate of the characteristic distance scale.
-
-In high-dimensional spaces, distance distributions often exhibit heavy tails and may contain outliers (e.g., points far from any centroid). The mean is sensitive to such extreme values and can be significantly skewed, leading to an overestimation of $\sigma$. This, in turn, would cause the Gaussian kernel to become overly flat, reducing locality and weakening the correlation between geometry and the generated attribute.
-
-In contrast, the median is a robust statistic that is insensitive to outliers and better reflects the typical (central) distance between vectors and centroids. As a result, it yields a more stable and representative bandwidth, ensuring that the kernel maintains an appropriate balance between locality and smoothness.
+We use the median instead of the mean to obtain robustness to outliers. In high-dimensional spaces, distance distributions often exhibit heavy tails, and the mean can be skewed by extreme values. The median provides a more stable estimate of the typical distance, ensuring that the kernel maintains an appropriate balance between locality and smoothness.
 
 \paragraph{Monte Carlo Interpretation}
 
-This estimation can be viewed as a Monte Carlo approximation of the global distance distribution between data points and centroids.
-
-Specifically, instead of computing statistics over the full set of $Nk$ distances, we approximate the median distance by sampling a subset of points uniformly at random. Under this sampling scheme, the empirical distribution of distances over $S$ converges to the true distribution as $|S|$ increases. Therefore, the estimated $\sigma$ provides a consistent approximation of the characteristic distance scale of the dataset, while significantly reducing computational cost.
+This estimation can be viewed as a Monte Carlo approximation of the global distance distribution. Rather than computing statistics over all $Nk$ distances, we approximate the median using a random sample. As the sample size increases, the estimate converges to the true median of the full distribution.
 
 \subsection{Soft Assignment}
 
 The weights $w_{ij}$ induce a \emph{soft assignment} of each vector to all clusters simultaneously.
 
-In contrast to hard clustering, where each vector is assigned to a single cluster:
+In contrast to hard clustering, where each vector is assigned to a single cluster,
 \[
 x_i \mapsto \arg\min_j \|x_i - c_j\|,
 \]
 soft assignment produces a distribution over clusters:
 \[
-x_i \mapsto (w_{i1}, w_{i2}, \dots, w_{ik}).
+x_i \mapsto (w_{i1}, \dots, w_{ik}).
 \]
 
-Each weight $w_{ij}$ reflects the degree to which centroid $c_j$ contributes to the representation of $x_i$. Nearby centroids receive higher weights, while distant centroids contribute negligibly.
+Each weight $w_{ij}$ reflects the contribution of centroid $c_j$ to the representation of $x_i$. Nearby centroids receive higher weights, while distant centroids contribute negligibly.
 
-This has two key advantages:
-\begin{itemize}
-    \item It avoids discontinuities introduced by hard assignments, where small changes in $x_i$ may abruptly change cluster membership.
-    \item It allows multiple nearby clusters to jointly influence the attribute value, leading to smoother and more robust metadata.
-\end{itemize}
-
-\subsection{Radial Basis Function Interpretation}
-
-The Gaussian kernel used in the weighting scheme is a specific instance of a \emph{radial basis function} (RBF). In general, an RBF is a function of the form:
-\[
-\phi(x, c) = g(\|x - c\|),
-\]
-i.e., its value depends only on the distance between $x$ and a center $c$.
-
-In our case:
-\[
-\phi(x_i, c_j) = \exp\left(-\frac{\|x_i - c_j\|^2}{2\sigma^2}\right).
-\]
-
-The term ``radial'' refers to the fact that the function is isotropic—it depends only on the radius (distance) and not on direction.
-
-\paragraph{Why RBFs are used}
-
-Using an RBF provides the following properties:
-
-\begin{itemize}
-    \item \textbf{Smooth decay:} The influence of a centroid decreases smoothly with distance, avoiding sharp boundaries.
-    
-    \item \textbf{Locality:} Only nearby centroids contribute significantly, preserving local geometric structure.
-    
-    \item \textbf{Continuity:} The resulting mapping from vectors to attributes is continuous, ensuring that similar vectors receive similar attribute values.
-\end{itemize}
-
-These properties are essential for constructing metadata that is meaningfully correlated with the geometry of the embedding space. In particular, the RBF weighting ensures that the resulting attributes respect the underlying notion of similarity induced by the vector representation.
-
-\subsection{Continuous Attribute Construction}
-
-We define the continuous attribute value for each vector as:
-\[
-a_i^{(\mathrm{cont})} =
-\frac{\sum_{j=1}^k w_{ij} v_j}{\sum_{j=1}^k w_{ij}}.
-\]
-
-This corresponds to a kernel-weighted aggregation of cluster-level signals.
-
-\paragraph{Marginal Flattening}
-
-To reduce skew in the attribute distribution, we apply a rank-based rescaling to $a_i^{(\mathrm{cont})}$.
-
-Specifically, we replace each value by its empirical cumulative distribution function (CDF) rank:
-\[
-a_i^{(\mathrm{cont})} \leftarrow \frac{\mathrm{rank}(a_i^{(\mathrm{cont})})}{N}.
-\]
-
-This transformation preserves ordering while producing a more uniform marginal distribution, improving the stability of neighbor comparisons.
-
-\paragraph{Normalization and Quantization}
+\subsection{Normalization and Quantization}
 
 We normalize:
 \[
-\hat{a}_i = \frac{a_i^{(\mathrm{cont})} - \min_i a_i^{(\mathrm{cont})}}
-{\max_i a_i^{(\mathrm{cont})} - \min_i a_i^{(\mathrm{cont})}},
+\hat{a}_i =
+\frac{a_i^{(\mathrm{cont})} - \min_i a_i^{(\mathrm{cont})}}
+{\max_i a_i^{(\mathrm{cont})} - \min_i a_i^{(\mathrm{cont})}}.
 \]
-with appropriate handling for degenerate cases.
+
+If all values are identical, we set $\hat{a}_i = 0.5$ for all $i$.
 
 Finally, we quantize:
 \[
 a_i = \mathrm{round}(200 \cdot \hat{a}_i), \quad a_i \in \{0,\dots,200\}.
 \]
 
-This yields discrete attributes suitable for range-based filtering.
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=0.8\linewidth]{figures/correlated_attr_stats.png}
-    \includegraphics[width=0.8\linewidth]{figures/correlated_attr_pca_pair.png}
-    \caption{Your caption describing the image.}
-    \label{fig:your_label}
-\end{figure}
-
 \section{Uncorrelated Attribute Generation}
 
-\section{Query Range Generation}
-\subsection{Positive (correlated)}
-\subsection{Negative (anti-correlated)}
-\subsection{Random}
+For the uncorrelated baseline, each vector is assigned an attribute value independently and uniformly at random from $\mathcal{A}$:
+\[
+a_i^{(\mathrm{rand})} \sim \mathrm{Unif}(\{0,\dots,200\}).
+\]
 
-\section{Selectivity Control}
+This construction is independent of the vector space and removes any relationship between vector similarity and attribute similarity.
+
+\section{Query Range Generation}
+
+We describe how query-dependent attribute filter ranges are constructed under controlled selectivity and varying correlation regimes.
+
+Let 
+\[
+\{q_t\}_{t=1}^{n_q} \subset \mathbb{R}^d
+\]
+be the set of query vectors, and let
+\[
+\{a_i\}_{i=1}^{N}, \quad a_i \in \{0, \dots, 200\},
+\]
+denote the attribute values associated with the dataset.
+
+Given a target selectivity $s \in (0,1]$, we define the nominal number of matching points as
+\[
+T = \max\bigl(1, \min(N, \lfloor sN \rfloor)\bigr).
+\]
+
+We further define the globally sorted attribute array
+\[
+A_{\mathrm{sort}} = \mathrm{sort}(a_1, \dots, a_N),
+\]
+which serves as the basis for constructing attribute-value intervals.
+
+\subsection{Nearest-Neighbor Attribute Summary}
+
+For each query $q_t$, we perform an exact nearest-neighbor search in the vector space and retrieve its $k$ nearest dataset points:
+\[
+N_t = \{i_1, \dots, i_k\}.
+\]
+Their corresponding attribute values are collected as
+\[
+A_t = \{a_{i_1}, \dots, a_{i_k}\}.
+\]
+
+We define the query-specific local attribute center as the median:
+\[
+m_t = \mathrm{median}(A_t).
+\]
+
+This quantity provides a robust estimate of the local attribute distribution around the query.
+
+\subsection{Positive Range Construction}
+
+We first determine the insertion position of $m_t$ in the global sorted array:
+\[
+p_t = \mathrm{searchsorted}(A_{\mathrm{sort}}, m_t).
+\]
+
+Let
+\[
+h = \left\lfloor \frac{T}{2} \right\rfloor.
+\]
+We define the clipped rank interval:
+\[
+\ell_t = \max(0,\, p_t - h), \qquad
+u_t = \min(N-1,\, p_t + h).
+\]
+
+The resulting attribute filter is
+\[
+[L_t^+, U_t^+] = [A_{\mathrm{sort}}[\ell_t],\; A_{\mathrm{sort}}[u_t]].
+\]
+
+\paragraph{Remark (Selectivity).}
+This construction targets a window of size approximately $T$ in rank space. However, since filtering is performed over attribute \emph{values} rather than exact ranks, the number of selected points is not guaranteed to be exactly $T$. Due to duplicate attribute values, the realized selectivity may deviate from the target.
+
+\subsection{Negative Range Construction}
+
+We first compute the global median:
+\[
+m_g = \mathrm{median}(A_{\mathrm{sort}}).
+\]
+
+We define two global tail intervals:
+\[
+[L_{\text{left}}, U_{\text{left}}] =
+[A_{\mathrm{sort}}[0],\; A_{\mathrm{sort}}[\min(T-1,\, N-1)]],
+\]
+\[
+[L_{\text{right}}, U_{\text{right}}] =
+[A_{\mathrm{sort}}[\max(0,\, N-T)],\; A_{\mathrm{sort}}[N-1]].
+\]
+
+For each query, the negative range is defined as:
+\[
+[L_t^-, U_t^-] =
+\begin{cases}
+[L_{\text{left}}, U_{\text{left}}], & \text{if } m_t > m_g, \\
+[L_{\text{right}}, U_{\text{right}}], & \text{otherwise}.
+\end{cases}
+\]
+
+Note that the ``otherwise'' case includes $m_t = m_g$, in which case the right-tail interval is selected.
+
+\paragraph{Interpretation.}
+Queries whose local neighborhood contains high attribute values are paired with low-valued ranges, and vice versa. This induces systematic anti-correlation between vector similarity and attribute filtering.
+
+\subsection{Random Range Construction}
+
+For the random baseline, attribute ranges are generated independently of the query vectors.
+
+We sample a starting index
+\[
+r_t \sim \mathrm{Uniform}\{0, \dots, N - T\},
+\]
+and define the interval
+\[
+[L_t^{(r)}, U_t^{(r)}] =
+[A_{\mathrm{sort}}[r_t],\; A_{\mathrm{sort}}[\min(N-1,\, r_t + T)]].
+\]
+
+This produces a contiguous interval in sorted value space with nominal width corresponding to $T$ ranks.
+
+\subsection{Selectivity Control}
+
+Given a filter range $[L, U]$, the realized selectivity is
+\[
+\mathrm{sel}(L,U) =
+\frac{1}{N}
+\left|
+\{\, i \in \{1,\dots,N\} \mid L \le a_i \le U \,\}
+\right|.
+\]
+
+In practice, this is computed using binary search on the sorted array:
+\[
+\text{left} = \mathrm{searchsorted}(A_{\mathrm{sort}}, L, \text{left}),
+\]
+\[
+\text{right} = \mathrm{searchsorted}(A_{\mathrm{sort}}, U, \text{right}),
+\]
+\[
+\mathrm{sel}(L,U) = \frac{\text{right} - \text{left}}{N}.
+\]
+
+\paragraph{Key Observation.}
+Selectivity is \emph{controlled} approximately through rank-space window construction, but \emph{realized} exactly with respect to the induced value interval.
 
 \section{Dataset Validation}
-\subsection{Neighbor consistency}
-\subsection{Cluster distributions}
+
+\subsection{Neighbor Consistency and Attribute Distribution}
+
+A central property of the correlated attribute construction is that nearby vectors in the embedding space should receive similar attribute values.
+
+To validate this, for each vector $x_i$, we compute its $k$-nearest neighbors and denote their indices by $N_i$. We then define the average attribute value of its neighbors as
+\[
+\bar{a}_i = \frac{1}{|N_i|} \sum_{j \in N_i} a_j.
+\]
+
+We assess local consistency by comparing $a_i$ with $\bar{a}_i$. To visualize this, we plot each point as $(a_i, \bar{a}_i)$. Points that lie close to the diagonal indicate that a vector’s attribute value agrees with the average of its neighbors.
+ 
+Figure~\ref{fig:correlated_attributes} and Figure~\ref{fig:random_attributes} illustrate the results for correlated and random attributes, respectively.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/correlated_attr_stats.png}
+    \caption{Correlated attribute. Strong diagonal trend indicates high local consistency between $a_i$ and $\bar{a}_i$. Values span the full domain.}
+    \label{fig:correlated_attributes}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/random_attr_stats.png}
+    \caption{Random attribute. Points are scattered, indicating no geometric correlation.}
+    \label{fig:random_attributes}
+\end{figure}
+
+\subsection{PCA Visualization}
+
+We project the 128-dimensional vectors onto their first principal components and color each point by its attribute value $a_i$, since we cannot visualize the original space. This lets us check whether nearby points have similar $a_i$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/correlated_attr_pca_pair.png}
+    \caption{Correlated attribute. Smooth color gradients reflect alignment with the embedding geometry.}
+    \label{fig:correlated_attributes_pca}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/random_attr_pca_pair.png}
+    \caption{Random attribute. No visible structure; colors appear uncorrelated with the embedding.}
+    \label{fig:random_attributes_pca}
+\end{figure}
