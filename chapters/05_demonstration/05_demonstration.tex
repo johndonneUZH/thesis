@@ -480,3 +480,244 @@ error, but also reduces the sample size, increasing estimation variance.
 Overall, \(\lambda\) acts as a regularization parameter, trading off geometric
 fidelity against statistical stability by controlling the spatial extent over
 which the conditional distribution is assumed constant.
+
+\section{Correlation Metric}
+We define the correlation metric that quantifies the alignment between a query and a filter. 
+
+\subsection{Alignment Scoring.}
+Given a query $q$, an associated cluster $c^* = c^*(q)$ and a filter defined by an attribute range $[L,U]$, we quantify the alignment between the filter and the local attribute distribution.
+
+Using the cumulative distribution functions, we compute the probability mass of the filter range under both the local and global distributions:
+\[
+P_{c^*}([L,U]) = \mathrm{CDF}_{c^*}(U) - \mathrm{CDF}_{c^*}(L),
+\]
+\[
+P_{\mathrm{GLOBAL}}([L,U]) = \mathrm{CDF}_{\mathrm{GLOBAL}}(U) - \mathrm{CDF}_{\mathrm{GLOBAL}}(L).
+\]
+These quantities measure how likely it is, under each distribution, for a randomly drawn attribute value to fall within the filter interval.
+
+\subsection{Lift.}
+We define the lift as the logarithmic ratio between local and global probabilities:
+\[
+\mathrm{lift}(q) = \log \left( \frac{P_{c^*}([L,U]) + \epsilon}{P_{\mathrm{GLOBAL}}([L,U]) + \epsilon} \right),
+\]
+where $\epsilon > 0$ is a small constant for numerical stability.
+
+The lift measures the relative enrichment or depletion of the filter range within the local distribution compared to the global baseline.
+
+\paragraph{Relative vs.\ Absolute Comparison.}
+We use a ratio rather than a difference because we are interested in relative deviations. An absolute difference 
+\[
+P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U])
+\]
+can be misleading, as it does not account for the scale of the probabilities.
+
+Example: $0.02$ vs $0.01$ $\rightarrow$ difference $= 0.01$ (small), but actually doubled.\\
+Example: $0.6$ vs $0.5$ $\rightarrow$ difference $= 0.1$ (bigger), but only $20\%$ increase.
+
+By contrast, the ratio
+\[
+\frac{P_{c^*}([L,U])}{P_{\mathrm{GLOBAL}}([L,U])}
+\]
+directly captures how many times more (or less) likely the filter range is under the local distribution compared to the global distribution. Values greater than one indicate enrichment, while values less than one indicate depletion.
+
+If $\mathrm{lift}(q) > 0$, the filter range contains more probability mass locally than globally.\\
+If $\mathrm{lift}(q) < 0$, the filter range is underrepresented locally.
+
+Thus, $\mathrm{lift}$ encodes the direction of alignment between the filter and the local distribution.
+
+\paragraph{Logarithmic Transformation.}
+We apply a logarithm to the ratio for two reasons.
+
+First, it yields a symmetric representation around $0$. Without the logarithm, enrichment and depletion are not symmetric:
+\[
+2 \quad \text{vs} \quad 0.5.
+\]
+With the logarithm:
+\[
+\log(2) = -\log(0.5).
+\]
+Thus:
+\[
+\text{Enriched: } \log(2) \approx 0.69, \quad
+\text{Depleted: } \log(0.5) \approx -0.69.
+\]
+
+Second, ratios can explode. For example:
+\[
+P_{\mathrm{GLOBAL}} = 0.001, \quad P_{c^*} = 0.1 \;\Rightarrow\; \text{ratio} = 100.
+\]
+The logarithm compresses this:
+\[
+\log(100) \approx 4.6,
+\]
+preventing extreme values from dominating.
+
+\subsection{Divergence.}
+To quantify the extent to which the local attribute distribution differs from the global distribution, we compute the Jensen--Shannon divergence:
+\[
+\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}).
+\]
+
+The Jensen--Shannon divergence is defined as
+\[
+\mathrm{JS}(P \,\|\, Q) = \tfrac{1}{2} \mathrm{KL}(P \,\|\, M) + \tfrac{1}{2} \mathrm{KL}(Q \,\|\, M),
+\quad M = \tfrac{1}{2}(P + Q),
+\]
+where $\mathrm{KL}$ denotes the Kullback--Leibler divergence:
+\[
+\mathrm{KL}(P \,\|\, Q) = \sum_j P(j) \log \frac{P(j)}{Q(j)}.
+\]
+
+The Kullback--Leibler divergence measures how inefficient it would be to represent samples drawn from $P$ using a distribution $Q$, or equivalently, how much information is lost when $Q$ is used in place of $P$. However, it is directional.
+
+The Jensen--Shannon divergence converts this into a symmetric measure of dissimilarity by comparing both distributions to their midpoint $M$. It therefore captures how different the two distributions are without privileging either one.
+
+In our setting, $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}})$ measures how strongly the local attribute distribution associated with the query differs from the overall dataset-wide distribution. Small values indicate similarity, while larger values indicate distinct structure.
+
+\paragraph{Why Not KL Divergence Directly?}
+Although KL divergence is standard, it is not ideal here.
+
+First, it is asymmetric:
+\[
+\mathrm{KL}(P \,\|\, Q) \neq \mathrm{KL}(Q \,\|\, P).
+\]
+
+Second, it can be undefined when $Q(j) = 0$ and $P(j) > 0$.
+
+Third, it is unbounded above, making it harder to interpret.
+
+By contrast, Jensen--Shannon divergence is symmetric, always defined, and bounded:
+\[
+0 \le \mathrm{JS}(P \,\|\, Q) \le \log 2.
+\]
+
+\subsection{Final Scores.}
+
+We consider multiple variants of the correlation score to study how alignment direction and magnitude interact.
+
+\paragraph{Signed Interpretation (Baseline).}
+For $\mathrm{corr}_1$, the score decomposes as:
+\[
+\mathrm{corr}_1(q) = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \mathrm{sign}(\mathrm{lift}(q)).
+\]
+
+The divergence measures how strongly the local distribution deviates from the global baseline, while the lift determines whether the filter range is locally enriched or depleted.
+
+If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $\mathrm{corr}_1(q) \approx 0$, regardless of the lift.
+
+A positive score indicates enrichment,
+$P_{c^*}([L,U]) > P_{\mathrm{GLOBAL}}([L,U])$, while a negative score indicates depletion,
+$P_{c^*}([L,U]) < P_{\mathrm{GLOBAL}}([L,U])$.
+
+Thus, $\mathrm{corr}_1$ captures both the strength of distributional deviation and the direction of alignment.
+
+\paragraph{Tanh-scaled Interpretation.}
+For $\mathrm{corr}_2$, the score is given by:
+\[
+\mathrm{corr}_2(q) = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \tanh(\mathrm{lift}(q)).
+\]
+
+The divergence again measures the deviation between local and global distributions, but the lift now influences both the direction and the magnitude of the score through a smooth, bounded transformation.
+
+As in the baseline, the sign of the score indicates enrichment or depletion. However, stronger alignment leads to larger magnitudes, while extreme values are dampened by the $\tanh$ function.
+
+If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $\mathrm{corr}_2(q) \approx 0$, regardless of the lift.
+
+Thus, $\mathrm{corr}_2$ reflects both distributional deviation and the strength of alignment in a continuous manner.
+
+\paragraph{Difference-based Interpretation.}
+For $\mathrm{corr}_3$, the score is defined as:
+\[
+\mathrm{corr}_3(q) = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \big(P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U])\big).
+\]
+
+The divergence again captures the deviation between local and global distributions, while the difference term measures the absolute change in probability mass.
+
+The sign indicates enrichment or depletion, as in the previous formulations. However, the magnitude depends on absolute differences rather than relative ones, making the score sensitive to the scale of the probabilities.
+
+If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $\mathrm{corr}_3(q) \approx 0$, regardless of the difference term.
+
+Thus, $\mathrm{corr}_3$ combines distributional deviation with absolute, rather than relative, alignment effects.
+
+
+\section{Thresholding with \texorpdfstring{$\tau$}{tau}}
+
+The correlation score is a continuous quantity. However, query planning requires a discrete classification of the correlation type: \emph{negative}, \emph{random}, or \emph{positive}. To obtain this, we introduce a symmetric threshold $\tau \ge 0$ and define
+\[
+\hat{y}(s;\tau)=
+\begin{cases}
+\text{positive}, & s>\tau,\\[4pt]
+\text{negative}, & s<-\tau,\\[4pt]
+\text{random}, & |s|\le \tau.
+\end{cases}
+\]
+Thus, $\tau$ determines the minimum magnitude a score must have to be considered informative, while values close to zero are treated as uncorrelated.
+
+\subsection{Ground Truth.}
+We use the true correlation $C(q,p)$ (Section~\ref{sec:correlation}) as ground truth. Each query is assigned an intended class (\emph{negative}, \emph{random}, or \emph{positive}) based on the sign and magnitude of $C(q,p)$. The goal is to choose $\tau$ such that the predicted labels $\hat{y}(s;\tau)$, derived from an approximate score $s$, best match these ground truth classes.
+
+\subsection{Evaluation metrics.}
+For a given metric, we evaluate candidate thresholds
+\[
+\tau \in [0, \max_i |s_i|],
+\]
+where $\{s_i\}$ are the observed scores. This interval is discretized using a uniform grid (400 points by default). For each candidate $\tau$, all queries are classified according to the rule above, yielding predicted labels.
+
+We then compare predicted and intended labels using the following metrics:
+\[
+\text{accuracy}, \quad \text{balanced accuracy}, \quad \text{macro-F1}.
+\]
+
+Let $y_i$ and $\hat{y}_i$ denote the true and predicted labels for query $i$, and let $\mathcal{C} = \{\text{negative}, \text{random}, \text{positive}\}$.
+
+\paragraph{Accuracy.}
+Accuracy measures overall agreement between predicted and true labels:
+\[
+\mathrm{Accuracy} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}\{\hat{y}_i = y_i\},
+\]
+where $N$ is the number of queries and $\mathbf{1}\{\cdot\}$ is the indicator function.
+
+\paragraph{Balanced Accuracy.}
+Balanced accuracy averages recall across all classes:
+\[
+\mathrm{BalancedAcc} = \frac{1}{|\mathcal{C}|} \sum_{c \in \mathcal{C}} \mathrm{Recall}_c,
+\]
+where
+\[
+\mathrm{Recall}_c = \frac{\mathrm{TP}_c}{\mathrm{TP}_c + \mathrm{FN}_c},
+\]
+and $\mathrm{TP}_c$ and $\mathrm{FN}_c$ denote the number of true positives and false negatives for class $c$.
+
+\paragraph{Macro-F1.}
+Macro-F1 averages the F1 score across classes:
+\[
+\mathrm{MacroF1} = \frac{1}{|\mathcal{C}|} \sum_{c \in \mathcal{C}} \mathrm{F1}_c,
+\]
+where
+\[
+\mathrm{F1}_c = \frac{2 \cdot \mathrm{Precision}_c \cdot \mathrm{Recall}_c}{\mathrm{Precision}_c + \mathrm{Recall}_c},
+\]
+and
+\[
+\mathrm{Precision}_c = \frac{\mathrm{TP}_c}{\mathrm{TP}_c + \mathrm{FP}_c}.
+\]
+
+Accuracy measures overall agreement but can be misleading under class imbalance (e.g., when most queries are classified as \emph{random}). Balanced accuracy and macro-F1 instead give equal weight to each class, making them more appropriate for evaluating threshold quality in this setting.
+
+\subsection{Selected Threshold.}
+The selected threshold is
+\[
+\tau^* = \arg\max_{\tau} \mathrm{Obj}(\tau),
+\]
+where $\mathrm{Obj}$ is the chosen evaluation metric (balanced accuracy by default). If multiple thresholds achieve the same optimum, the smallest one is selected.
+
+\subsection{Selectivity Dependence.}
+The optimal threshold varies with the selectivity $s$ of the filter. To account for this, we estimate $\tau$ at multiple selectivity levels and fit a function
+\[
+\tau(s) \approx p(\log_{10} s),
+\]
+where $p$ is a polynomial. This provides a smooth approximation of the threshold across different selectivity regimes.
+
+\subsection{Usage in Query Planning.}
+The function $\tau(s)$ is stored as a database statistic. At query time, the planner estimates the selectivity $s$, computes $\tau(s)$, and classifies the correlation score accordingly. The resulting class (\emph{negative}, \emph{random}, or \emph{positive}) determines the query execution strategy.
