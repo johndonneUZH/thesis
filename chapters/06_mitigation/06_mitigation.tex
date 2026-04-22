@@ -1,5 +1,298 @@
-\chapter{System \& Execution Strategies}\label{chap:strategies}
-\section{Pre-filtering}
-\section{Post-filtering}
-\section{Inline Filtering}
-\section{Implementation Details}
+\chapter{Experiments}\label{chap:experiments}
+\section{Setup}
+Having introduced the theoretical foundations of our correlation detection strategy, 
+we now evaluate its effectiveness through a series of empirical experiments.
+
+The data used from this point onward, namely the vector embeddings and their associated metadata, are described in detail in Section~\ref{sec:dataset} and Section~\ref{sec:correlated-attribute-generation}, respectively.
+
+\section{Preliminary Experiments}
+We conduct a controlled study on a synthetic dataset to analyze the behavior of filtered search. 
+We consider four target selectivities:
+\[
+0.1\%,\; 1\%,\; 10\%,\; 50\%,
+\]
+which determine the width of the metadata query range and, consequently, the fraction of database vectors satisfying the predicate.
+
+For each selectivity and each query vector, we generate three metadata intervals as described in Section~\ref{sec:query-generation}. 
+This yields three workloads of query--predicate pairs:
+\[
+(\mathbf{q}, P^+),\qquad (\mathbf{q}, P^-),\qquad (\mathbf{q}, P^{\mathrm{rand}}),
+\]
+corresponding to the positive, negative, and random correlation regimes. 
+For a query set of 10{,}000 vectors, this results in 30{,}000 query--predicate pairs in total.
+
+For each workload, we compute the exact filtered ground truth before evaluating any approximate method.
+
+Each query consists of a query vector together with a metadata interval \([l,u]\) that defines the filter condition. 
+To avoid repeating identical work, queries with the same interval are processed together. 
+For every distinct interval, we use the metadata values sorted in ascending order to locate, via binary search, the contiguous range of vector ids whose attributes fall inside \([l,u]\). 
+This yields the exact admissible candidate set for that filter.
+
+We then perform exact \(k\)-nearest neighbor search using a FAISS \texttt{IndexFlatL2}, while restricting the search space to this candidate set through an \texttt{IDSelector}. 
+The resulting neighbors are used as the reference ground truth when measuring the recall of approximate methods.
+
+Across all selectivities and correlation regimes, we benchmark three execution strategies, deeply covered in Chapter~\ref{subsec:implementation-details}.
+We measure total runtime, queries per second (QPS), and recall@k with respect to the exact filtered ground truth. 
+
+Results are reported in tabular form and visualized using summary plots.
+
+\clearpage
+\thispagestyle{plain}
+\begin{center}
+\vspace*{\fill}
+
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{10pt}
+\normalsize
+
+\begin{adjustbox}{center, width=\textwidth, max totalheight=0.92\textheight}
+\begin{tabular}{llcccc}
+\toprule
+Selectivity & Correlation & Strategy & Recall & QPS & Time (s) \\
+\midrule
+
+\multirow{9}{*}{50\%}
+& Positive & ACORN & 0.869 & 1084 & 9.22 \\
+&          & Post  & 0.862 & 8326 & 1.20 \\
+&          & Pre   & 1.000 & 140  & 71.52 \\
+& Negative & ACORN & 0.879 & 1079 & 9.26 \\
+&          & Post  & 0.644 & 688  & 14.53 \\
+&          & Pre   & 1.000 & 131  & 76.20 \\
+& Random   & ACORN & 0.923 & 1105 & 9.05 \\
+&          & Post  & 0.820 & 8724 & 1.15 \\
+&          & Pre   & 1.000 & 129  & 77.63 \\
+
+\midrule
+
+\multirow{9}{*}{10\%}
+& Positive & ACORN & 0.950 & 1146 & 8.72 \\
+&          & Post  & 0.955 & 1807 & 5.53 \\
+&          & Pre   & 1.000 & 619  & 16.15 \\
+& Negative & ACORN & 0.685 & 1159 & 8.63 \\
+&          & Post  & 0.047 & 277  & 36.09 \\
+&          & Pre   & 1.000 & 746  & 13.41 \\
+& Random   & ACORN & 0.938 & 1102 & 9.08 \\
+&          & Post  & 0.922 & 1865 & 5.36 \\
+&          & Pre   & 1.000 & 605  & 16.52 \\
+
+\midrule
+
+\multirow{9}{*}{1\%}
+& Positive & ACORN & 0.917 & 1181 & 8.47 \\
+&          & Post  & 0.908 & 629  & 15.90 \\
+&          & Pre   & 1.000 & 4666 & 2.14 \\
+& Negative & ACORN & 0.626 & 1205 & 8.30 \\
+&          & Post  & 0.000 & 624  & 16.03 \\
+&          & Pre   & 1.000 & 16049 & 0.62 \\
+& Random   & ACORN & 0.731 & 1140 & 8.77 \\
+&          & Post  & 0.450 & 622  & 16.08 \\
+&          & Pre   & 1.000 & 4916 & 2.03 \\
+
+\midrule
+
+\multirow{9}{*}{0.1\%}
+& Positive & ACORN & 0.685 & 1149 & 8.71 \\
+&          & Post  & 0.495 & 623  & 16.05 \\
+&          & Pre   & 1.000 & 12126 & 0.82 \\
+& Negative & ACORN & 0.486 & 1253 & 7.98 \\
+&          & Post  & 0.000 & 629  & 15.89 \\
+&          & Pre   & 1.000 & 113734 & 0.09 \\
+& Random   & ACORN & 0.027 & 1206 & 8.29 \\
+&          & Post  & 0.082 & 620  & 16.13 \\
+&          & Pre   & 1.000 & 25174 & 0.40 \\
+
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+
+\vspace{0.5em}
+\captionof{table}{Performance comparison across selectivities and correlation regimes.}
+\label{tab:performance-comparison}
+\end{center}
+
+\clearpage
+\thispagestyle{plain}
+
+{
+\centering
+
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel50/performance_metrics_0p5.png}}
+\captionof{figure}{Performance summary plots for $50\%$ selectivity.}
+
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel10/performance_metrics_0p1.png}}
+\captionof{figure}{Performance summary plots for $10\%$ selectivity.}
+
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel1/performance_metrics_0p01.png}}
+\captionof{figure}{Performance summary plots for $1\%$ selectivity.}
+
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel0p1/performance_metrics_0p001.png}}
+\captionof{figure}{Performance summary plots for $0.1\%$ selectivity.}
+
+\par
+}
+
+\clearpage
+\section{Correlation Analysis}\label{sec:correlation-analysis}
+
+Alongside benchmarking, we evaluate whether the proposed metrics (Section~\ref{subsec:final-scores}) effectively capture correlation structure. We randomly sample a small subset of queries (10 in the current implementation, using a fixed random seed) and consider the three predicates associated with each query: positive, negative, and random.
+
+For each query--predicate pair, we compute the true correlation as defined in Section~\ref{sec:correlation}, together with the heuristic scores \emph{heuristic}, \emph{tanh}, and \emph{p-gap}. These scores are then compared against the true correlation values.
+
+The visualization consists of a three-panel scatter plot. In each panel, the x-axis represents the true correlation, while the y-axis represents one of the heuristic scores. Points are colored according to whether they originate from a positive, negative, or random query range. Each panel also includes the diagonal reference line \(y=x\), the zero axes, and the Pearson correlation coefficient between the heuristic score and the true correlation.
+
+This allows us to assess both sign agreement and calibration quality of the surrogate metrics.
+
+Finally, the data obtained in this step serves as input to the later \(\tau\)-estimation stage (Section~\ref{subsec:tau-estimation}), where we determine which metric is the most suitable candidate for heuristic design.
+
+Results are reported using summary plots.
+
+{
+\centering
+\vspace{0.4em}
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel50/correlation_comparison_0p5.png}}
+\captionof{figure}{Correlation comparison plots for $50\%$ selectivity.}
+\label{fig:corr-50pct}
+\vspace{0.4em}
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel10/correlation_comparison_0p1.png}}
+\captionof{figure}{Correlation comparison plots for $10\%$ selectivity.}
+\label{fig:corr-10pct}
+\vspace{0.4em}
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel1/correlation_comparison_0p01.png}}
+\captionof{figure}{Correlation comparison plots for $1\%$ selectivity.}
+\label{fig:corr-1pct}
+\vspace{0.4em}
+\makebox[\textwidth][c]{%
+\includegraphics[width=1.08\textwidth]{figures/sel0p1/correlation_comparison_0p001.png}}
+\captionof{figure}{Correlation comparison plots for $0.1\%$ selectivity.}
+\label{fig:corr-0p1pct}
+\par
+}
+
+\paragraph{Why are some queries misclassified by the heuristic metric?}
+
+The heuristic is only a cluster-level approximation, whereas the true correlation is computed from the exact top-\(k\) nearest-neighbor rankings under filtering. The two quantities therefore measure related, but not identical, effects.
+
+Its magnitude is determined by the Jensen--Shannon term, while its sign depends on whether the predicate mass inside the assigned cluster (\(p_c\)) is larger or smaller than the global mass (\(p_g\)). Both quantities rely on aggregate cluster statistics rather than on the actual admissible neighbors.
+
+As a result, a query can be positive under the true metric but receive a negative heuristic score when the filter improves the exact neighborhood, yet the assigned cluster underrepresents the predicate.
+
+For example, in Figure~\ref{fig:corr-10pct}, Query 3 has \texttt{true\_correlation = 0.0228} but \texttt{heuristic\_correlation = -0.2573}, since \(p_c = 0.00738 < p_g = 0.00984\).
+
+Although the heuristic is imperfect, computing the true correlation online would require exact filtered nearest-neighbor evaluation at query time, which is impractical. We therefore accept a limited risk of misclassification in exchange for a lightweight runtime proxy.
+
+\paragraph{Why do tanh and pgap squish everything to 0 as we lower selectivity?}
+As selectivity decreases, the interval \([l,u]\) becomes narrower and covers a smaller portion of the attribute domain. Consequently, the probability mass captured by the interval decreases for both the local cluster distribution and the global distribution. Writing the interval width as \(\Delta\), and considering a small range around value \(a\), we obtain the local approximations
+
+\[
+p_c \approx f_c(a)\,\Delta,
+\qquad
+p_g \approx f_g(a)\,\Delta,
+\]
+
+where \(f_c\) and \(f_g\) denote the corresponding densities. As \(\Delta\) shrinks, both \(p_c\) and \(p_g\) decrease.
+
+This directly explains the behavior of the \(p\)-gap score,
+
+\[
+\mathrm{pgap} = \mathrm{JS}\,(p_c - p_g),
+\]
+
+since
+
+\[
+p_c - p_g \approx \bigl(f_c(a)-f_g(a)\bigr)\Delta.
+\]
+
+Hence, the difference term contracts approximately linearly with the interval width, causing the score magnitude to decrease.
+
+For the tanh-based score,
+
+\[
+\mathrm{tanh} = \mathrm{JS}\,\tanh\!\left(\log\frac{p_c}{p_g}\right),
+\]
+
+the mechanism is slightly different. A narrower interval does not automatically imply that \(p_c/p_g \to 1\); if the local density remains substantially larger or smaller than the global density, the ratio may still deviate from one. In practice, however, \(p_c\) and \(p_g\) are estimated from precomputed histogram bins rather than exact pointwise densities. Therefore, very small intervals often inherit nearly the same coarse bin mass in both distributions, which pulls the ratio toward one and drives
+
+\[
+\log\!\left(\frac{p_c}{p_g}\right) \to 0.
+\]
+
+As a result, the tanh score also approaches zero for highly selective ranges.
+
+A representative example is shown below for the same negatively correlated query across selectivities:
+
+\[
+\begin{array}{c|c|c|c|c}
+\text{Selectivity} & p_c & p_g & \text{pgap} & \text{tanh} \\
+\hline
+0.5   & 0.2320 & 0.4862 & -0.0900   & -0.2228 \\
+0.1   & 0.1500 & 0.2033 & -0.0189   & -0.1045 \\
+0.01  & 0.0925 & 0.0978 & -0.00188  & -0.0197 \\
+0.001 & 0.0550 & 0.0556 & -0.000208 & -0.00376
+\end{array}
+\]
+
+As selectivity decreases, both masses become smaller, their difference vanishes, and their ratio moves closer to one. Consequently, both \(p\)-gap and tanh scores collapse toward zero.
+
+\section{Estimating \texorpdfstring{$\tau$}{tau}} \label{sec:tau-estimation}
+The estimation of \(\tau\) can be formulated as a ternary classification problem. For a given query and filter, the correlation metric must decide whether the filter is positively correlated with the query, negatively correlated, or effectively random. 
+Combining Section~\ref{sec:tau} and Section~\ref{subsec:selectivity-dependence}, for any metric \(m\), this decision is made through a symmetric threshold around zero:
+
+\[
+\hat{y}_m(q)=
+\begin{cases}
+\text{positive} & \text{if } m(q) > \tau_m(s) \\
+\text{negative} & \text{if } m(q) < -\tau_m(s) \\
+\text{random} & \text{otherwise}
+\end{cases}
+\]
+
+where \(s\) is the selectivity of the filter and \(\tau_m(s)\) is the selectivity-dependent threshold for metric \(m\). 
+
+The main challenge is that this is a classification problem without labeled data in production. In a deployed system, we do not know in advance whether an incoming query-filter pair should be considered positive, negative, or random.
+
+To address this, we move the supervision step offline. We run a calibration workload over a representative set of selectivities, in our case \(s \in \{0.001, 0.01, 0.1, 0.5\}\). For each selectivity level, we evaluate a collection of queries and compute the expensive reference score \texttt{true\_correlation}. 
+This reference score is used as a teacher signal: it defines what should be considered meaningful positive correlation, meaningful negative correlation, and effectively random behavior at that selectivity. 
+
+More precisely, for each selectivity \(s\), we first estimate a teacher threshold \(\tau_{\text{true}}(s)\) from the offline distribution of \texttt{true\_correlation}. This threshold defines the random band around zero. We then derive teacher labels as follows:
+
+\[
+y(q)=
+\begin{cases}
+\text{positive} & \text{if } c_{\text{true}}(q) > \tau_{\text{true}}(s) \\
+\text{negative} & \text{if } c_{\text{true}}(q) < -\tau_{\text{true}}(s) \\
+\text{random} & \text{otherwise}
+\end{cases}
+\]
+
+These teacher labels are then used to calibrate the cheaper runtime metrics, such as heuristic, tanh, and pgap. For each metric and each selectivity point, we sweep candidate values of \(\tau_m(s)\) and choose the one that best reproduces the teacher labels. This gives one calibrated threshold per metric per selectivity.
+
+After this offline calibration, we no longer need to recompute the expensive teacher online. Instead, the discrete threshold values are interpolated as a function of selectivity, yielding a continuous threshold function \(\tau_m(s)\). At runtime, the system first estimates the filter selectivity \(s\), then evaluates the corresponding threshold \(\tau_m(s)\), and finally classifies the metric score using the symmetric rule above. As a result, the costly supervision step is performed entirely offline, while online execution only requires a lightweight selectivity estimate and a fast evaluation of the interpolated threshold function.
+
+\paragraph{Planning on the boundary.}
+A further difficulty arises when integrating the threshold into the query planner, since rule-based routing at the threshold boundary induces discrete plan changes. 
+As a result, queries whose metric values lie close to the threshold may be assigned to different execution plans, despite being nearly indistinguishable in practice. 
+For example, depending on the planner policy, a query slightly above the threshold may be routed to PRE-FILTER, whereas one slightly below it may be routed to ACORN.
+
+This highlights a limitation of hard thresholding: $\tau(s)$ should be understood as a practical routing threshold rather than a perfect semantic separator. 
+ 
+One possible mitigation would be to use probabilistic routing for queries near the threshold. Instead of deterministically selecting a single plan, the system could choose between two candidate plans according to probabilities derived from a Gaussian distribution centered at the threshold. 
+Queries far from the threshold would still be routed almost deterministically, while those close to it would allow smoother transitions between plans.
+
+We do not explore this direction further in the present thesis, but it represents an interesting direction for future work.
+
+
+\section{Heuristic Design}
+\subsection{Deriving the Heuristic}
+
+\section{Heuristic Evaluation}
+\subsection{Results across Selectivities}
+
+\section{Evaluation on Real-World Data}

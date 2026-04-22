@@ -592,14 +592,14 @@ By contrast, Jensen--Shannon divergence is symmetric, always defined, and bounde
 0 \le \mathrm{JS}(P \,\|\, Q) \le \log 2.
 \]
 
-\subsection{Final Scores.}
+\subsection{Final Scores.}\label{subsec:final-scores}
 
 We consider multiple variants of the correlation score to study how alignment direction and magnitude interact.
 
 \paragraph{Signed Interpretation (Baseline).}
-For $\mathrm{corr}_1$, the score decomposes as:
+For ${C_{\mathrm{heur}}}$, the score decomposes as:
 \[
-\mathrm{corr}_1(q) = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \mathrm{sign}(\mathrm{lift}(q)).
+C_{\mathrm{heur}} = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \mathrm{sign}(\mathrm{lift}(q)).
 \]
 
 The divergence measures how strongly the local distribution deviates from the global baseline, while the lift determines whether the filter range is locally enriched or depleted.
@@ -610,38 +610,38 @@ A positive score indicates enrichment,
 $P_{c^*}([L,U]) > P_{\mathrm{GLOBAL}}([L,U])$, while a negative score indicates depletion,
 $P_{c^*}([L,U]) < P_{\mathrm{GLOBAL}}([L,U])$.
 
-Thus, $\mathrm{corr}_1$ captures both the strength of distributional deviation and the direction of alignment.
+Thus, $C_{\mathrm{heur}}$ captures both the strength of distributional deviation and the direction of alignment.
 
 \paragraph{Tanh-scaled Interpretation.}
-For $\mathrm{corr}_2$, the score is given by:
+For $C_{\tanh}$, the score is given by:
 \[
-\mathrm{corr}_2(q) = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \tanh(\mathrm{lift}(q)).
+C_{\tanh} = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \tanh(\mathrm{lift}(q)).
 \]
 
 The divergence again measures the deviation between local and global distributions, but the lift now influences both the direction and the magnitude of the score through a smooth, bounded transformation.
 
 As in the baseline, the sign of the score indicates enrichment or depletion. However, stronger alignment leads to larger magnitudes, while extreme values are dampened by the $\tanh$ function.
 
-If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $\mathrm{corr}_2(q) \approx 0$, regardless of the lift.
+If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $C_{\tanh} \approx 0$, regardless of the lift.
 
-Thus, $\mathrm{corr}_2$ reflects both distributional deviation and the strength of alignment in a continuous manner.
+Thus, $C_{\tanh}$ reflects both distributional deviation and the strength of alignment in a continuous manner.
 
 \paragraph{Difference-based Interpretation.}
-For $\mathrm{corr}_3$, the score is defined as:
+For $C_{\mathrm{pgap}}$, the score is defined as:
 \[
-\mathrm{corr}_3(q) = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \big(P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U])\big).
+C_{\mathrm{pgap}} = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \big(P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U])\big).
 \]
 
 The divergence again captures the deviation between local and global distributions, while the difference term measures the absolute change in probability mass.
 
 The sign indicates enrichment or depletion, as in the previous formulations. However, the magnitude depends on absolute differences rather than relative ones, making the score sensitive to the scale of the probabilities.
 
-If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $\mathrm{corr}_3(q) \approx 0$, regardless of the difference term.
+If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $C_{\mathrm{pgap}} \approx 0$, regardless of the difference term.
 
-Thus, $\mathrm{corr}_3$ combines distributional deviation with absolute, rather than relative, alignment effects.
+Thus, $C_{\mathrm{pgap}}$ combines distributional deviation with absolute, rather than relative, alignment effects.
 
 
-\section{Thresholding with \texorpdfstring{$\tau$}{tau}}
+\section{Thresholding with \texorpdfstring{$\tau$}{tau}}\label{sec:tau}
 
 The correlation score is a continuous quantity. However, query planning requires a discrete classification of the correlation type: \emph{negative}, \emph{random}, or \emph{positive}. To obtain this, we introduce a symmetric threshold $\tau \ge 0$ and define
 \[
@@ -710,14 +710,15 @@ The selected threshold is
 \[
 \tau^* = \arg\max_{\tau} \mathrm{Obj}(\tau),
 \]
-where $\mathrm{Obj}$ is the chosen evaluation metric (balanced accuracy by default). If multiple thresholds achieve the same optimum, the smallest one is selected.
+where $\mathrm{Obj}$ is the chosen evaluation metric (balanced accuracy by default). If multiple thresholds achieve the same optimum, the smallest one is selected. 
 
-\subsection{Selectivity Dependence.}
+\subsection{Selectivity Dependence.}\label{subsec:selectivity-dependence}
 The optimal threshold varies with the selectivity $s$ of the filter. To account for this, we estimate $\tau$ at multiple selectivity levels and fit a function
 \[
 \tau(s) \approx p(\log_{10} s),
 \]
 where $p$ is a polynomial. This provides a smooth approximation of the threshold across different selectivity regimes.
+This is dealt with more detail in Section~\ref{sec:tau-estimation}.
 
 \subsection{Usage in Query Planning.}
 The function $\tau(s)$ is stored as a database statistic. At query time, the planner estimates the selectivity $s$, computes $\tau(s)$, and classifies the correlation score accordingly. The resulting class (\emph{negative}, \emph{random}, or \emph{positive}) determines the query execution strategy.

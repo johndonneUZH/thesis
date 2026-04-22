@@ -9,7 +9,7 @@ All attributes are defined over a bounded discrete domain:
 \mathcal{A} = \{0, \dots, 200\}.
 \]
 
-\section{Correlated Attribute Generation}
+\section{Correlated Attribute Generation}\label{sec:correlated-attribute-generation}
 
 We aim to enforce a strong relationship between vector similarity and attribute similarity, i.e., vectors that are close in the embedding space should receive similar attribute values.
 
@@ -168,7 +168,7 @@ a_i^{(\mathrm{rand})} \sim \mathrm{Unif}(\{0,\dots,200\}).
 
 This construction is independent of the vector space and removes any relationship between vector similarity and attribute similarity.
 
-\section{Query Range Generation}
+\section{Query Range Generation}\label{sec:query-generation}
 
 We describe how query-dependent attribute filter ranges are constructed under controlled selectivity and varying correlation regimes.
 
@@ -325,14 +325,14 @@ Figure~\ref{fig:correlated_attributes} and Figure~\ref{fig:random_attributes} il
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{figures/correlated_attr_stats.png}
+    \includegraphics[width=0.9\linewidth]{figures/sel50/correlated_attr_stats.png}
     \caption{Correlated attribute. Strong diagonal trend indicates high local consistency between $a_i$ and $\bar{a}_i$. Values span the full domain.}
     \label{fig:correlated_attributes}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{figures/random_attr_stats.png}
+    \includegraphics[width=0.9\linewidth]{figures/sel50/random_attr_stats.png}
     \caption{Random attribute. Points are scattered, indicating no geometric correlation.}
     \label{fig:random_attributes}
 \end{figure}
@@ -343,14 +343,14 @@ We project the 128-dimensional vectors onto their first principal components and
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{figures/correlated_attr_pca_pair.png}
+    \includegraphics[width=0.9\linewidth]{figures/sel50/correlated_attr_pca_pair.png}
     \caption{Correlated attribute. Smooth color gradients reflect alignment with the embedding geometry.}
     \label{fig:correlated_attributes_pca}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{figures/random_attr_pca_pair.png}
+    \includegraphics[width=0.9\linewidth]{figures/sel50/random_attr_pca_pair.png}
     \caption{Random attribute. No visible structure; colors appear uncorrelated with the embedding.}
     \label{fig:random_attributes_pca}
 \end{figure}

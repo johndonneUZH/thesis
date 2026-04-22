@@ -1,29 +1,142 @@
 \chapter{Methodology}\label{chap:methodology}
 
-This chapter describes the methodology used to evaluate the proposed correlation metric. The goal is to study how the relationship between structured attributes and the embedding space affects query behavior in filtered vector search.
+This chapter describes the experimental methodology used in this thesis. Its purpose is to define the datasets and baseline implementations that form the basis of the empirical evaluation in later chapters.
 
-To this end, we define a data model and a query model, and evaluate the proposed metric across different datasets and query configurations. The methodology is designed to isolate the effect of attribute--embedding interaction while remaining independent of a specific index structure.
+We consider both a controlled synthetic setting and a real-world dataset in order to study filtered vector search under different forms of metadata--embedding interaction. In addition, we specify the concrete implementations of the execution strategies introduced in Chapter~\ref{sec:execution-strategies}, namely pre-filtering, post-filtering, and ACORN.
 
-\section{Data Model}
+The goal of this chapter is therefore not to present results, but to make the experimental setup precise: which data is used, how vectors and metadata are represented, and how the compared search strategies are instantiated in our evaluation.
 
-We consider datasets of high-dimensional vectors, where each vector is associated with a structured attribute.
+\section{Datasets}\label{sec:dataset}
 
-As a proof of concept, we use a handcrafted dataset based on SIFT1M, consisting of one million vectors of dimension 128. Structured attributes are generated and attached to these vectors to control the degree of correlation with the embedding space.
+We will evaluate our method on both synthetic and real-world data, allowing us to analyze its behavior under controlled conditions as well as in realistic settings.
 
-In addition, we use real-world embeddings based on GloVe to evaluate the proposed approach under more realistic data distributions.
+\subsection{SIFT1M.}
+As a benchmark for vector similarity search, we use the widely adopted \textsc{SIFT1M} dataset, introduced in~\cite{jegou2010product} and used in subsequent works such as ACORN~\cite{acorn}. 
+The dataset consists of one million vectors in $\mathbb{R}^{128}$, extracted using the Scale-Invariant Feature Transform (SIFT), a classical computer vision technique for representing local image descriptors.
 
-\section{Query Model}
+\textsc{SIFT1M} is provided in two splits. The \emph{database} split contains $10^6$ vectors used for indexing, while the \emph{test} split contains $10^4$ query vectors, each accompanied by ground-truth nearest neighbors in the database under the Euclidean distance. 
+This standardized setup enables consistent evaluation of approximate nearest neighbor (ANN) search methods.
 
-Queries consist of a vector and a structured predicate. The predicate is defined as a range over the attribute domain.
+Since \textsc{SIFT1M} does not include structured attributes, we augment it with synthetic attributes following the procedure described in Chapter~\ref{chap:dataset-construction}. 
 
-For evaluation, we use a set of 10,000 query vectors. For each query, we retrieve the top-$k$ nearest neighbors under the given predicate, with $k = 100$.
+\subsection{Amazon Products Dataset.}
+To complement the controlled synthetic setting, we also evaluate our method on a real-world dataset with naturally occurring structured attributes. 
+For this purpose, we use the Amazon Products dataset~\cite{amazon-products}, a web-scraped collection of product listings from the Amazon website.
 
-This setup allows us to analyze how filtering affects retrieval behavior under different query conditions.
+The dataset is organized into category-specific CSV files covering 142 product categories, together with a consolidated file, \texttt{Amazon-Products.csv}, containing the full collection. 
+Each product entry includes textual and structured information such as the product name, main category, subcategory, image link, product link, rating, number of ratings, discount price, and actual price.
 
-\section{Evaluation Setup}
+To construct vector representations, we embed the textual product information, in particular the product names, into a high-dimensional semantic space using a pre-trained embedding model. 
+As a result, each product is represented by a vector embedding capturing semantic similarity, together with structured metadata derived from the original listing.
 
-We evaluate query performance using recall@k, comparing approximate results to exact nearest neighbors.
+Unlike the synthetic attributes generated for \textsc{SIFT1M}, the structured attributes in this dataset arise naturally from the data and are not designed to follow any prescribed correlation with the embedding space. 
+This makes the dataset suitable for evaluating the robustness of our method under realistic conditions, where the relationship between vector similarity and structured attributes is unknown, heterogeneous, and potentially noisy.
 
-To isolate the effect of attribute--embedding interaction, we consider queries with varying degrees of correlation between the predicate and the embedding space. This allows us to study how the proposed metric relates to retrieval difficulty and execution behavior.
+\section{Implementation Details}\label{subsec:implementation-details}
+For the execution strategies, expanding on what we dicussed in \ref{sec:execution-strategies} we will use the following implementations:
+\paragraph{Pre-filter.}
+The pre-filter baseline applies the metadata predicate before any vector ranking takes place. 
+Given a query vector $q \in \mathbb{R}^d$ and a predicate interval $[l,h]$, the algorithm first identifies the subset of database vectors whose scalar metadata values satisfy the predicate. 
+Formally, if the database is $\{(x_i, a_i)\}_{i=1}^N$, where $x_i \in \mathbb{R}^d$ is the vector embedding and $a_i \in \mathbb{Z}$ is the associated metadata value, then the admissible set is
+\[
+X_{[l,h]} = \{x_i \mid l \le a_i \le h\}.
+\]
 
-\section{Objective}
+To support efficient predicate evaluation, the metadata array is materialized offline in sorted order. 
+More precisely, the implementation stores both a sorted metadata array and the corresponding permutation of vector identifiers. 
+At query time, two binary searches are performed on the sorted metadata array to locate the left and right boundaries of the interval $[l,h]$. 
+This yields a contiguous block of identifiers corresponding exactly to the admissible subset. 
+Hence, predicate evaluation itself costs only $O(\log N)$ time.
+
+Once this contiguous identifier range has been obtained, the implementation performs an exact scan over the corresponding vectors. 
+For each admissible vector $x_i$, it computes the squared Euclidean distance
+\[
+d(q, x_i) = \|q - x_i\|_2^2
+\]
+by explicitly iterating over all $d$ dimensions. 
+The resulting list of $(d(q,x_i), i)$ pairs is then partially sorted to retain only the $k$ smallest distances. 
+If the admissible subset contains at most $k$ elements, the list is fully sorted; otherwise, a partial sort is used to avoid unnecessary ordering work beyond the top-$k$ frontier.
+
+It is important to note that, in the current implementation, pre-filtering does \emph{not} perform ANN search on a dedicated filtered index. 
+Although the preprocessing stage constructs index artifacts, the actual query-time pre-filter path computes exact distances to every admissible vector and then selects the exact top-$k$ within that subset. 
+Thus, algorithmically, this baseline is best understood as \emph{filter first, then exact $k$-NN on the filtered subset}.
+
+Let $m = |X_{[l,h]}|$ denote the number of admissible vectors for a given query. 
+The dominant cost per query is then the exact distance computation over the filtered subset, which requires $O(md)$ arithmetic operations, followed by top-$k$ selection. 
+Consequently, pre-filtering is highly effective for selective predicates, where $m \ll N$, since the candidate set is reduced before any geometric search is performed. 
+However, as the predicate becomes less selective and $m$ approaches $N$, the method degenerates toward a full scan and becomes increasingly expensive.
+
+\paragraph{Post-filter.}
+The post-filter baseline reverses the order of operations: it first performs approximate nearest neighbor retrieval on the full vector dataset, and only afterwards applies the metadata predicate to the returned candidates. 
+The implementation uses an HNSW index over all database vectors, entirely ignoring metadata during graph traversal. 
+Thus, the first phase returns an approximate ranking with respect to vector similarity alone.
+
+Formally, given query vector $q$ and predicate interval $[l,h]$, the method first queries the global HNSW index to retrieve a candidate list
+\[
+C(q) = \{x_{i_1}, x_{i_2}, \dots, x_{i_f}\},
+\]
+where $f$ is the number of fetched candidates and the sequence is ordered approximately by increasing vector distance to $q$. 
+The metadata predicate is then applied to this candidate list, keeping only those items whose attributes satisfy
+\[
+l \le a_{i_j} \le h.
+\]
+The final answer consists of the first $k$ admissible candidates encountered in this approximate ranking.
+
+A central challenge of post-filtering is that, when the predicate is selective, only a small fraction of the globally nearest candidates are expected to satisfy the metadata constraint. 
+To compensate, the implementation uses an adaptive over-fetching strategy. 
+If the estimated selectivity of the predicate is $s = m/N$, where $m$ is the number of admissible vectors, then the initial fetch size is chosen approximately proportional to $k/s$. 
+Intuitively, if only a fraction $s$ of candidates are expected to survive filtering, then one must retrieve on the order of $k/s$ candidates to expect about $k$ valid results. 
+A multiplicative slack factor is added in practice to make this more robust.
+
+More concretely, the implementation first estimates the number of admissible points by applying binary search to the sorted metadata array, just as in the pre-filter case. 
+This does not identify the actual nearest admissible vectors, but it provides an estimate of predicate selectivity. 
+The initial over-fetch size is then computed as
+\[
+f \approx \left\lceil \frac{k}{s} \cdot \alpha \right\rceil,
+\]
+where $\alpha > 1$ is a heuristic multiplicative factor. 
+The HNSW search parameter $efSearch$ is increased accordingly, ensuring that the graph exploration depth is at least as large as the requested candidate set size.
+
+After HNSW returns its candidate list, the implementation scans this list in order and retains the first $k$ items whose metadata satisfies the predicate. 
+If too few valid items are found, the algorithm increases the fetch size, by doubling it, and reruns the HNSW search. 
+This retry process continues until one of the following conditions is met: either at least $k$ valid results have been found and the retrieved prefix contains a sufficiently large number of admissible candidates, or a maximum retry / fetch budget has been reached.
+
+This stopping rule is important. 
+Finding exactly $k$ valid results in the filtered prefix does not by itself imply that the returned set is a good approximation of the true filtered top-$k$. 
+If only a very small number of admissible points were encountered in the fetched prefix, then the search may have truncated the filtered ranking too aggressively. 
+The implementation therefore also checks how many admissible points were observed overall in the fetched set, using this as a proxy for whether the search depth was sufficient.
+
+The computational behavior of post-filtering differs fundamentally from that of pre-filtering. 
+Its cost is not determined directly by the true admissible set size $m$, but rather by the amount of over-fetching required to recover enough valid points from a global ANN ranking. 
+When the predicate is broad, this method is efficient because many of the globally nearest neighbors are also admissible, so only modest over-fetching is needed. 
+When the predicate is highly selective, however, the majority of retrieved candidates are discarded, causing the fetch size and HNSW search depth to grow substantially. 
+As a result, post-filtering typically performs well at high selectivities but degrades sharply as selectivity decreases.
+
+\paragraph{ACORN.}
+ACORN is a hybrid vector search method designed specifically to mitigate the weaknesses of conventional post-filtering under selective predicates. 
+Instead of treating metadata filtering as an afterthought applied to a standard ANN index, ACORN modifies the underlying graph structure so that filtered search remains effective even when the admissible subset is sparse.
+
+The implementation used in this work relies on the open-source ACORN library.\footnote{\url{https://github.com/guestrin-lab/ACORN}} 
+Conceptually, ACORN can be understood as an extension of HNSW in which graph construction is made more robust to filtering. 
+In a standard HNSW graph, each node stores a limited number of neighbors chosen to support efficient greedy routing in the full, unfiltered space. 
+Under metadata predicates, however, the induced subgraph on admissible nodes may become poorly connected or even fragmented, making it difficult for standard HNSW traversal to reach relevant valid points.
+
+ACORN addresses this by constructing a denser and more predicate-robust graph. 
+During index construction, each node considers a larger candidate neighborhood than would be used in standard HNSW. 
+If $M$ is the target graph degree, then ACORN-$\gamma$ expands the candidate pool by a factor $\gamma$, exploring up to approximately $M\gamma$ neighbors before pruning. 
+This produces a graph with higher redundancy and improved connectivity under filtering. 
+A compression or pruning parameter $M_\beta$ is then used to control memory growth by retaining only the most useful edges.
+
+At query time, ACORN performs filtered ANN search directly on this augmented graph. 
+The predicate is incorporated into traversal rather than applied only after retrieval. 
+Intuitively, once search has reached predicate-satisfying regions of the graph, traversal can continue primarily through nodes that also satisfy the filter, thereby approximating search on the induced admissible subgraph without explicitly materializing separate per-predicate indexes.
+
+As in HNSW, ACORN maintains a dynamic candidate set whose size is governed by an exploration parameter $ef$. 
+Larger values of $ef$ increase search breadth and usually improve recall at the cost of higher latency. 
+However, because the graph has been constructed to be more robust under filtering, ACORN can often recover high-quality predicate-satisfying neighbors with much less over-fetching than naive post-filtering. 
+In particular, it reduces the failure mode in which the nearest admissible points are not well connected to the entry path of the unfiltered ANN graph.
+
+From an algorithmic perspective, ACORN occupies a middle ground between pre-filtering and post-filtering. 
+Unlike pre-filtering, it does not explicitly enumerate the full admissible subset and therefore avoids the linear-in-$m$ scan cost. 
+Unlike post-filtering, it does not rely solely on a global unfiltered ranking and thus is less sensitive to the scarcity of admissible points in the early retrieved prefix. 
+Its main trade-off is a more expensive and memory-intensive index construction phase, together with a more specialized graph structure.

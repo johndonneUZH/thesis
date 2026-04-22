@@ -30,7 +30,7 @@ Recent work has also explored learning-based approaches, where models are used t
 
 In this thesis, ANN search is implemented using the FAISS library \cite{douze2025faisslibrary}. It provides a unified framework that implements a variety of ANN techniques, including graph-based methods such as HNSW, as well as exact search for ground truth computation.
 
-\subsection{Metrics for ANNS Evaluation}
+\subsection{Metrics for ANNS Evaluation}\label{subsec:metrics-for-ann}
 
 ANN systems are typically evaluated along three main dimensions: retrieval quality, query efficiency, and resource usage, reflecting the trade-offs inherent in approximate search \cite{johnson2017billionscalesimilaritysearchgpus, douze2025faisslibrary}.
 
@@ -148,7 +148,7 @@ In this thesis, we develop a practical method to estimate this quantity efficien
 
 Execution strategies define how structured filter predicates are combined with nearest neighbor search. The main difference between them is when and how the filter is applied in relation to the search process. This design choice directly affects performance, efficiency, and result quality.
 
-In this thesis, we focus on three main execution strategies.
+In this thesis, we focus on three main execution strategies, which will be later described in detail in Section~\ref{subsec:implementation-details}.
 
 \subsection{Pre-filtering}\label{sec:pre-filtering}
 
@@ -168,13 +168,10 @@ This allows the index to operate normally, but it does not guarantee that \(k\) 
 
 \subsection{Inline Filtering}\label{sec:inline-filtering}
 
-Inline filtering incorporates the predicate into the search itself, so that it directly constrains which nodes are explored. Instead of constructing \( D_\phi \) in advance (pre-filtering) or discarding invalid results after retrieval (post-filtering), the constraint is enforced during traversal.
+Inline filtering incorporates the predicate directly into the search, restricting traversal to nodes that satisfy the constraint. 
+In graph-based indexes, this corresponds to searching over the subgraph induced by the predicate, which may be poorly connected and thus difficult to explore effectively.
 
-In graph-based indexes, this amounts to searching over the subgraph induced by the predicate, i.e., nodes \( x \in D \) such that \( \phi(x) \) holds. A key challenge is that this subgraph is typically not well connected, which can prevent the search from reaching relevant parts of the space.
+ACORN~\cite{acorn} addresses this issue by preserving connectivity under filtering. 
+It first performs standard HNSW routing until reaching a node satisfying the predicate, and then continues the search within the filtered subgraph by applying the predicate during neighbor expansion.
 
-ACORN \cite{acorn} addresses this by maintaining connectivity under filtering. At query time, it begins from the standard HNSW entry point and performs greedy routing until it reaches a node satisfying the predicate. From there, the search proceeds only through nodes that satisfy the predicate, with filtering applied to neighbor expansions at each step.
-
-To support this restricted traversal, ACORN provides two variants. ACORN-\(\gamma\) increases connectivity at index construction time by expanding each node’s neighborhood by a factor \(\gamma\), followed by pruning to control index size. This pruning is \emph{predicate-agnostic}, i.e., based solely on standard distance-based heuristics and independent of any predicate, ensuring that the index remains general-purpose while improving connectivity for arbitrary filters. In contrast, ACORN-1 leaves the index unchanged and performs additional neighbor exploration dynamically at query time.
-
-In this thesis, ACORN serves as the representative inline filtering method.
-
+We use ACORN as the representative inline filtering approach.
