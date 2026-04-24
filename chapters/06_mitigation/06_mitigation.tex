@@ -256,25 +256,54 @@ Combining Section~\ref{sec:tau} and Section~\ref{subsec:selectivity-dependence},
 
 where \(s\) is the selectivity of the filter and \(\tau_m(s)\) is the selectivity-dependent threshold for metric \(m\). 
 
-The main challenge is that this is a classification problem without labeled data in production. In a deployed system, we do not know in advance whether an incoming query-filter pair should be considered positive, negative, or random.
+\paragraph{Generation of pseudo-labels.}
+A central challenge of our classification setting is the absence of ground-truth labels in production. 
+For an incoming query--filter pair \((q,\phi)\), there is no oracle indicating whether the filter is positively aligned with the local vector neighborhood, negatively aligned, or effectively random. 
+Direct supervision is therefore unavailable.
 
-To address this, we move the supervision step offline. We run a calibration workload over a representative set of selectivities, in our case \(s \in \{0.001, 0.01, 0.1, 0.5\}\). For each selectivity level, we evaluate a collection of queries and compute the expensive reference score \texttt{true\_correlation}. 
-This reference score is used as a teacher signal: it defines what should be considered meaningful positive correlation, meaningful negative correlation, and effectively random behavior at that selectivity. 
+To address this, we construct labels offline through a calibration procedure based on a \emph{null model of independence}. 
+Under this null model, query vectors and filters are sampled independently, so that the admissible set induced by the filter behaves like a random subset of the dataset with the same selectivity \(s\). 
+In such a setting, no systematic alignment between vector locality and filtering should exist, and therefore the reference score
+\[
+c_{\mathrm{true}}(q)
+\]
+should concentrate around zero. 
+The resulting distribution provides a dataset-level estimate of the noise floor expected under ``no real correlation.''
 
-More precisely, for each selectivity \(s\), we first estimate a teacher threshold \(\tau_{\text{true}}(s)\) from the offline distribution of \texttt{true\_correlation}. This threshold defines the random band around zero. We then derive teacher labels as follows:
+For each selectivity level \(s\), we generate many independent random query--filter pairs and compute the corresponding reference scores \(c_{\mathrm{true}}^{\mathrm{null}}\). 
+Rather than using unstable empirical extrema, we define a robust threshold from the null distribution via a high quantile:
+\[
+\tau_{\mathrm{true}}(s)
+=
+Q_{\alpha}\!\left(\left|c_{\mathrm{true}}^{\mathrm{null}}\right|\right),
+\]
+where \(Q_{\alpha}\) denotes the \(\alpha\)-quantile (e.g.\ \(\alpha=0.99\)). 
+This defines a symmetric \emph{random band}
+\[
+[-\tau_{\mathrm{true}}(s),\tau_{\mathrm{true}}(s)],
+\]
+inside which observed scores are statistically consistent with independence.
 
+We then assign pseudo-labels as follows:
 \[
 y(q)=
 \begin{cases}
-\text{positive} & \text{if } c_{\text{true}}(q) > \tau_{\text{true}}(s) \\
-\text{negative} & \text{if } c_{\text{true}}(q) < -\tau_{\text{true}}(s) \\
-\text{random} & \text{otherwise}
+\text{positive}, & c_{\mathrm{true}}(q)>\tau_{\mathrm{true}}(s),\\[4pt]
+\text{negative}, & c_{\mathrm{true}}(q)<-\tau_{\mathrm{true}}(s),\\[4pt]
+\text{random}, & \text{otherwise.}
 \end{cases}
 \]
 
-These teacher labels are then used to calibrate the cheaper runtime metrics, such as heuristic, tanh, and pgap. For each metric and each selectivity point, we sweep candidate values of \(\tau_m(s)\) and choose the one that best reproduces the teacher labels. This gives one calibrated threshold per metric per selectivity.
+Hence, labels are not manually specified and are not tied to semantic assumptions about any particular dataset. 
+They are induced from a null calibration procedure that identifies when the observed alignment is stronger than what would be expected by chance at the same selectivity. 
+Scores outside the band are interpreted as meaningful positive or negative correlation, while scores inside the band are treated as random behavior.
 
-After this offline calibration, we no longer need to recompute the expensive teacher online. Instead, the discrete threshold values are interpolated as a function of selectivity, yielding a continuous threshold function \(\tau_m(s)\). At runtime, the system first estimates the filter selectivity \(s\), then evaluates the corresponding threshold \(\tau_m(s)\), and finally classifies the metric score using the symmetric rule above. As a result, the costly supervision step is performed entirely offline, while online execution only requires a lightweight selectivity estimate and a fast evaluation of the interpolated threshold function.
+These pseudo-labels serve as teacher targets in the offline supervision stage. 
+For each cheap runtime metric \(m\in\{\texttt{heuristic},\texttt{tanh},\texttt{pgap}\}\), and for each selectivity level \(s\), we sweep candidate thresholds \(\tau_m(s)\) and select the one that best reproduces the pseudo-labels induced by \(c_{\mathrm{true}}\).
+
+After calibration, the expensive reference score is no longer required online. 
+The discrete thresholds are interpolated over selectivity to obtain continuous functions \(\tau_m(s)\). 
+At runtime, the system estimates the filter selectivity \(s\), evaluates \(\tau_m(s)\), computes the cheap metric \(m(q)\), and classifies the query using the same symmetric decision rule.
 
 \paragraph{Planning on the boundary.}
 A further difficulty arises when integrating the threshold into the query planner, since rule-based routing at the threshold boundary induces discrete plan changes. 
@@ -289,10 +318,27 @@ Queries far from the threshold would still be routed almost deterministically, w
 We do not explore this direction further in the present thesis, but it represents an interesting direction for future work.
 
 
-\section{Heuristic Design}
-\subsection{Deriving the Heuristic}
+\section{Planner Design}
+Now we are going to construct a very simple planner that takes into account the correlation structure of the query and filter, as estimated by the heuristic metric and the corresponding threshold.
+Given the data in Table~\ref{tab:performance-comparison} and the correlation analysis in Section~\ref{sec:correlation-analysis}, we can identify which execution strategy performs best in each correlation/selectivity regime and select the appropriate plan accordingly.
+
+For selectivity less than $1\%$, PRE-FILTER is the best strategy regardless of correlation, since it achieves perfect recall with very low latency.
+For selectivity greater than $10\%$, POST-FILTER performs reasonably well across positive and random correlation regimes, but collapses under negative correlation.
+ACORN is more robust to negative correlation, but its recall degrades as selectivity decreases.
+
+Therefore, for selectivity between $1\%$ and $10\%$, we take the arbitrary assumption that performance of PRE-FILTER linearly degrades as we approach $10\%$ selectivity, and the trade-off point with POST-FILTER occurs at $5\%$ selectivity.
+Based on these observations, we can define the following routing policy:
+\[
+\text{if } s < 5\% \text{ then } \text{PRE-FILTER}
+else:
+    if corr > positive or random then POST-FILTER
+    else ACORN
+\]
+
+
+
+\paragraph{Deriving the Heuristic}
 
 \section{Heuristic Evaluation}
-\subsection{Results across Selectivities}
 
 \section{Evaluation on Real-World Data}

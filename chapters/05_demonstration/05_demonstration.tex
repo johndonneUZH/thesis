@@ -505,6 +505,13 @@ where $\epsilon > 0$ is a small constant for numerical stability.
 
 The lift measures the relative enrichment or depletion of the filter range within the local distribution compared to the global baseline.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=1.08\textwidth]{figures/lift.png}
+\caption{Intrepreting lift visually.}
+\label{fig:lift}
+\end{figure}
+
 \paragraph{Relative vs.\ Absolute Comparison.}
 We use a ratio rather than a difference because we are interested in relative deviations. An absolute difference 
 \[
@@ -573,7 +580,14 @@ The Kullback--Leibler divergence measures how inefficient it would be to represe
 
 The Jensen--Shannon divergence converts this into a symmetric measure of dissimilarity by comparing both distributions to their midpoint $M$. It therefore captures how different the two distributions are without privileging either one.
 
-In our setting, $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}})$ measures how strongly the local attribute distribution associated with the query differs from the overall dataset-wide distribution. Small values indicate similarity, while larger values indicate distinct structure.
+In our setting, $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}})$ measures how strongly the local attribute distribution associated with the query differs from the overall dataset-wide distribution. 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=1.08\textwidth]{figures/js.png}
+\caption{Interpreting JS divergence visually.}
+\label{fig:js-divergence}
+\end{figure}
 
 \paragraph{Why Not KL Divergence Directly?}
 Although KL divergence is standard, it is not ideal here.
@@ -643,82 +657,128 @@ Thus, $C_{\mathrm{pgap}}$ combines distributional deviation with absolute, rathe
 
 \section{Thresholding with \texorpdfstring{$\tau$}{tau}}\label{sec:tau}
 
-The correlation score is a continuous quantity. However, query planning requires a discrete classification of the correlation type: \emph{negative}, \emph{random}, or \emph{positive}. To obtain this, we introduce a symmetric threshold $\tau \ge 0$ and define
+The correlation score \(c\) is a continuous quantity, whereas query planning requires a discrete decision: whether a query--filter pair should be classified as \emph{negative}, \emph{random}, or \emph{positive}. To bridge this gap, we introduce a symmetric threshold \(\tau \geq 0\) and define
 \[
-\hat{y}(s;\tau)=
+\hat{y}(c;\tau)=
 \begin{cases}
-\text{positive}, & s>\tau,\\[4pt]
-\text{negative}, & s<-\tau,\\[4pt]
-\text{random}, & |s|\le \tau.
+\text{positive}, & c>\tau,\\[4pt]
+\text{negative}, & c<-\tau,\\[4pt]
+\text{random}, & |c|\leq \tau.
 \end{cases}
 \]
-Thus, $\tau$ determines the minimum magnitude a score must have to be considered informative, while values close to zero are treated as uncorrelated.
 
-\subsection{Ground Truth.}
-We use the true correlation $C(q,p)$ (Section~\ref{sec:correlation}) as ground truth. Each query is assigned an intended class (\emph{negative}, \emph{random}, or \emph{positive}) based on the sign and magnitude of $C(q,p)$. The goal is to choose $\tau$ such that the predicted labels $\hat{y}(s;\tau)$, derived from an approximate score $s$, best match these ground truth classes.
+Thus, \(\tau\) represents the minimum absolute score required for a signal to be considered informative.
 
-\subsection{Evaluation metrics.}
-For a given metric, we evaluate candidate thresholds
-\[
-\tau \in [0, \max_i |s_i|],
-\]
-where $\{s_i\}$ are the observed scores. This interval is discretized using a uniform grid (400 points by default). For each candidate $\tau$, all queries are classified according to the rule above, yielding predicted labels.
+Determining an appropriate value of \(\tau\) is non-trivial. It is not a universal constant, but depends on both the metric space (since it is induced by the underlying correlation measure) and the selectivity of the filter, as correlation behavior varies across selectivity levels. Intuitively, a score that is meaningful for a highly selective predicate may be indistinguishable from noise for a broad predicate, and vice versa.
 
-We then compare predicted and intended labels using the following metrics:
-\[
-\text{accuracy}, \quad \text{balanced accuracy}, \quad \text{macro-F1}.
-\]
+Thresholds must therefore be calibrated as a function of selectivity, denoted by \(\tau(s)\).
 
-Let $y_i$ and $\hat{y}_i$ denote the true and predicted labels for query $i$, and let $\mathcal{C} = \{\text{negative}, \text{random}, \text{positive}\}$.
+\paragraph{Intuition.}
+The purpose of \(\tau\) is to determine what \emph{randomness} looks like at each selectivity level. 
+To understand this, temporarily ignore the distinction between positive and negative correlation and instead ask the following question: if metadata values were completely independent of the vector space and assigned at random, what scores would the correlation metric produce?
 
-\paragraph{Accuracy.}
-Accuracy measures overall agreement between predicted and true labels:
-\[
-\mathrm{Accuracy} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}\{\hat{y}_i = y_i\},
-\]
-where $N$ is the number of queries and $\mathbf{1}\{\cdot\}$ is the indicator function.
+This defines the \emph{null distribution} of the correlation score under independence. 
+In other words, it models the variation in scores that arises purely by chance when no genuine relationship exists between vector geometry and filtering. 
+Once this null distribution is estimated, it can be used to separate random fluctuations from meaningful structure. 
+Scores within the typical null range are classified as random, whereas sufficiently large positive or negative deviations are interpreted as genuine alignment or anti-alignment.
 
-\paragraph{Balanced Accuracy.}
-Balanced accuracy averages recall across all classes:
-\[
-\mathrm{BalancedAcc} = \frac{1}{|\mathcal{C}|} \sum_{c \in \mathcal{C}} \mathrm{Recall}_c,
-\]
-where
-\[
-\mathrm{Recall}_c = \frac{\mathrm{TP}_c}{\mathrm{TP}_c + \mathrm{FN}_c},
-\]
-and $\mathrm{TP}_c$ and $\mathrm{FN}_c$ denote the number of true positives and false negatives for class $c$.
+\paragraph{Why all of this, if we already have correlated and uncorrelated workloads defined in Section~\ref{sec:query-generation}?}
 
-\paragraph{Macro-F1.}
-Macro-F1 averages the F1 score across classes:
+Our synthetic workloads provide a controlled experimental setting in which the intended correlation type of each query--predicate pair is known in advance. 
+In a real-world deployment, however, such carefully constructed supervision is unavailable. For a new query--predicate pair \((q,\phi)\), there is no oracle indicating whether the filter is positively aligned with the local vector neighborhood of \(q\), negatively aligned, or effectively random. Ground-truth labels are therefore not observable in production.
+
+\subsection{Constructing the null workload}
+
+Calibrating the threshold \(\tau(s)\) requires a reference setting in which no true relationship exists between queries and filters. We therefore construct a \emph{null workload} that preserves selectivity while removing any systematic alignment between metadata and geometry.
+
+This is done in two steps. First, we assume that the metadata attribute is independent of the vector representation. Under this null hypothesis, query locality should provide no information about which points satisfy a filter. Consequently, after conditioning on selectivity, the admissible set should behave like a random subset of the dataset.
+
+Second, we remove structure internal to the metadata itself by replacing the original metadata values with synthetic values drawn from a uniform distribution. This prevents the calibration from depending on dataset-specific skew, clusters, or semantic regularities present in the real metadata.
+
+For categorical metadata, let
 \[
-\mathrm{MacroF1} = \frac{1}{|\mathcal{C}|} \sum_{c \in \mathcal{C}} \mathrm{F1}_c,
+V=\{v_1,\dots,v_m\}
 \]
-where
+denote the set of possible categories. Each point is assigned an independent synthetic value
 \[
-\mathrm{F1}_c = \frac{2 \cdot \mathrm{Precision}_c \cdot \mathrm{Recall}_c}{\mathrm{Precision}_c + \mathrm{Recall}_c},
-\]
-and
-\[
-\mathrm{Precision}_c = \frac{\mathrm{TP}_c}{\mathrm{TP}_c + \mathrm{FP}_c}.
+\tilde m(x_i)\sim \mathrm{Unif}(V).
 \]
 
-Accuracy measures overall agreement but can be misleading under class imbalance (e.g., when most queries are classified as \emph{random}). Balanced accuracy and macro-F1 instead give equal weight to each class, making them more appropriate for evaluating threshold quality in this setting.
-
-\subsection{Selected Threshold.}
-The selected threshold is
+An equality predicate is then generated by sampling
 \[
-\tau^* = \arg\max_{\tau} \mathrm{Obj}(\tau),
+a\sim \mathrm{Unif}(V)
 \]
-where $\mathrm{Obj}$ is the chosen evaluation metric (balanced accuracy by default). If multiple thresholds achieve the same optimum, the smallest one is selected. 
-
-\subsection{Selectivity Dependence.}\label{subsec:selectivity-dependence}
-The optimal threshold varies with the selectivity $s$ of the filter. To account for this, we estimate $\tau$ at multiple selectivity levels and fit a function
+and defining
 \[
-\tau(s) \approx p(\log_{10} s),
+\phi(x)=[\tilde m(x)=a].
 \]
-where $p$ is a polynomial. This provides a smooth approximation of the threshold across different selectivity regimes.
-This is dealt with more detail in Section~\ref{sec:tau-estimation}.
 
-\subsection{Usage in Query Planning.}
-The function $\tau(s)$ is stored as a database statistic. At query time, the planner estimates the selectivity $s$, computes $\tau(s)$, and classifies the correlation score accordingly. The resulting class (\emph{negative}, \emph{random}, or \emph{positive}) determines the query execution strategy.
+For continuous or ordered metadata, let
+\[
+V=[v_{\min},v_{\max}]
+\]
+be a numeric interval. Predicates are generated as random range filters of the form
+\[
+\phi(x)=[\ell \leq \tilde m(x)\leq r].
+\]
+
+To obtain a target selectivity \(s\), we sort the synthetic attribute values and choose a random contiguous window containing approximately \(s|X|\) points.
+
+Queries are sampled from the query workload, while predicates are sampled independently from the synthetic metadata. Since queries and predicates are independent by construction, any measured correlation score under this workload should be attributable to chance rather than genuine query--filter alignment.
+
+\subsection{Monte Carlo Null Calibration.}
+The null distribution of these heuristic scores is difficult to write down
+analytically because it depends on the empirical metadata distribution, the
+cluster assignment of sampled queries, the histogram binning, and the random
+range construction. Therefore, we estimate it by Monte Carlo simulation.
+Let 
+\[
+c(q,\phi)
+\]
+denote the correlation metric for which we want to estimate the threshold $\tau$
+
+We draw many null query--predicate pairs
+\[
+(q_i,\phi_i) \sim H_0
+\]
+and compute
+\[
+c_i^{\mathrm{null}} = c(q_i,\phi_i)
+\]
+for each pair. This produces an empirical null distribution
+\[
+\{c_1^{\mathrm{null}},\dots,c_M^{\mathrm{null}}\}.
+\]
+
+Since both positive and negative scores can occur by chance, we calibrate a
+two-sided threshold using the absolute scores:
+\[
+\hat{\tau}_s
+=
+Q_{0.99}
+\left(
+\left\{
+|c_i^{\mathrm{null}}|
+\right\}_{i=1}^M
+\right).
+\]
+
+At inference time, a score is classified as positive if it exceeds
+\(+\hat{\tau}_s\), negative if it is below \(-\hat{\tau}_s\), and random or
+uncorrelated otherwise:
+\[
+c(q,\phi) >
+\hat{\tau}_s
+\Rightarrow \text{positive},
+\]
+\[
+c(q,\phi) <
+-\hat{\tau}_s
+\Rightarrow \text{negative},
+\]
+\[
+|c(q,\phi)| \le \hat{\tau}_s
+\Rightarrow \text{random}.
+\]
+
+\subsection{$\tau(s)$ as a Function of Selectivity}
