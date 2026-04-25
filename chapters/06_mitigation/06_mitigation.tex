@@ -241,69 +241,7 @@ A representative example is shown below for the same negatively correlated query
 
 As selectivity decreases, both masses become smaller, their difference vanishes, and their ratio moves closer to one. Consequently, both \(p\)-gap and tanh scores collapse toward zero.
 
-\section{Estimating \texorpdfstring{$\tau$}{tau}} \label{sec:tau-estimation}
-The estimation of \(\tau\) can be formulated as a ternary classification problem. For a given query and filter, the correlation metric must decide whether the filter is positively correlated with the query, negatively correlated, or effectively random. 
-Combining Section~\ref{sec:tau} and Section~\ref{subsec:selectivity-dependence}, for any metric \(m\), this decision is made through a symmetric threshold around zero:
-
-\[
-\hat{y}_m(q)=
-\begin{cases}
-\text{positive} & \text{if } m(q) > \tau_m(s) \\
-\text{negative} & \text{if } m(q) < -\tau_m(s) \\
-\text{random} & \text{otherwise}
-\end{cases}
-\]
-
-where \(s\) is the selectivity of the filter and \(\tau_m(s)\) is the selectivity-dependent threshold for metric \(m\). 
-
-\paragraph{Generation of pseudo-labels.}
-A central challenge of our classification setting is the absence of ground-truth labels in production. 
-For an incoming query--filter pair \((q,\phi)\), there is no oracle indicating whether the filter is positively aligned with the local vector neighborhood, negatively aligned, or effectively random. 
-Direct supervision is therefore unavailable.
-
-To address this, we construct labels offline through a calibration procedure based on a \emph{null model of independence}. 
-Under this null model, query vectors and filters are sampled independently, so that the admissible set induced by the filter behaves like a random subset of the dataset with the same selectivity \(s\). 
-In such a setting, no systematic alignment between vector locality and filtering should exist, and therefore the reference score
-\[
-c_{\mathrm{true}}(q)
-\]
-should concentrate around zero. 
-The resulting distribution provides a dataset-level estimate of the noise floor expected under ``no real correlation.''
-
-For each selectivity level \(s\), we generate many independent random query--filter pairs and compute the corresponding reference scores \(c_{\mathrm{true}}^{\mathrm{null}}\). 
-Rather than using unstable empirical extrema, we define a robust threshold from the null distribution via a high quantile:
-\[
-\tau_{\mathrm{true}}(s)
-=
-Q_{\alpha}\!\left(\left|c_{\mathrm{true}}^{\mathrm{null}}\right|\right),
-\]
-where \(Q_{\alpha}\) denotes the \(\alpha\)-quantile (e.g.\ \(\alpha=0.99\)). 
-This defines a symmetric \emph{random band}
-\[
-[-\tau_{\mathrm{true}}(s),\tau_{\mathrm{true}}(s)],
-\]
-inside which observed scores are statistically consistent with independence.
-
-We then assign pseudo-labels as follows:
-\[
-y(q)=
-\begin{cases}
-\text{positive}, & c_{\mathrm{true}}(q)>\tau_{\mathrm{true}}(s),\\[4pt]
-\text{negative}, & c_{\mathrm{true}}(q)<-\tau_{\mathrm{true}}(s),\\[4pt]
-\text{random}, & \text{otherwise.}
-\end{cases}
-\]
-
-Hence, labels are not manually specified and are not tied to semantic assumptions about any particular dataset. 
-They are induced from a null calibration procedure that identifies when the observed alignment is stronger than what would be expected by chance at the same selectivity. 
-Scores outside the band are interpreted as meaningful positive or negative correlation, while scores inside the band are treated as random behavior.
-
-These pseudo-labels serve as teacher targets in the offline supervision stage. 
-For each cheap runtime metric \(m\in\{\texttt{heuristic},\texttt{tanh},\texttt{pgap}\}\), and for each selectivity level \(s\), we sweep candidate thresholds \(\tau_m(s)\) and select the one that best reproduces the pseudo-labels induced by \(c_{\mathrm{true}}\).
-
-After calibration, the expensive reference score is no longer required online. 
-The discrete thresholds are interpolated over selectivity to obtain continuous functions \(\tau_m(s)\). 
-At runtime, the system estimates the filter selectivity \(s\), evaluates \(\tau_m(s)\), computes the cheap metric \(m(q)\), and classifies the query using the same symmetric decision rule.
+\section{Estimating $\tau(s)$} \label{sec:tau-estimation}
 
 \paragraph{Planning on the boundary.}
 A further difficulty arises when integrating the threshold into the query planner, since rule-based routing at the threshold boundary induces discrete plan changes. 

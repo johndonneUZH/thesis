@@ -671,9 +671,9 @@ Thus, \(\tau\) represents the minimum absolute score required for a signal to be
 
 Determining an appropriate value of \(\tau\) is non-trivial. It is not a universal constant, but depends on both the metric space (since it is induced by the underlying correlation measure) and the selectivity of the filter, as correlation behavior varies across selectivity levels. Intuitively, a score that is meaningful for a highly selective predicate may be indistinguishable from noise for a broad predicate, and vice versa.
 
-Thresholds must therefore be calibrated as a function of selectivity, denoted by \(\tau(s)\).
+Thresholds must therefore be calibrated separately for each selectivity level, yielding a selectivity-dependent threshold function \(\tau(s)\).
 
-\paragraph{Intuition.}
+\paragraph{Why calibration is needed.}
 The purpose of \(\tau\) is to determine what \emph{randomness} looks like at each selectivity level. 
 To understand this, temporarily ignore the distinction between positive and negative correlation and instead ask the following question: if metadata values were completely independent of the vector space and assigned at random, what scores would the correlation metric produce?
 
@@ -682,12 +682,12 @@ In other words, it models the variation in scores that arises purely by chance w
 Once this null distribution is estimated, it can be used to separate random fluctuations from meaningful structure. 
 Scores within the typical null range are classified as random, whereas sufficiently large positive or negative deviations are interpreted as genuine alignment or anti-alignment.
 
-\paragraph{Why all of this, if we already have correlated and uncorrelated workloads defined in Section~\ref{sec:query-generation}?}
+\paragraph{Why labels unavailable in practice?}
 
 Our synthetic workloads provide a controlled experimental setting in which the intended correlation type of each query--predicate pair is known in advance. 
-In a real-world deployment, however, such carefully constructed supervision is unavailable. For a new query--predicate pair \((q,\phi)\), there is no oracle indicating whether the filter is positively aligned with the local vector neighborhood of \(q\), negatively aligned, or effectively random. Ground-truth labels are therefore not observable in production.
+In a real-world deployment, however, such carefully constructed supervision is unavailable. For a new query--predicate pair \((q,\phi)\), there is no oracle indicating whether the filter is positively aligned with the local vector neighborhood of \(q\), negatively aligned, or effectively random. Ground-truth labels are therefore unavailable in production.
 
-\subsection{Constructing the null workload}
+\subsection{Null workload}
 
 Calibrating the threshold \(\tau(s)\) requires a reference setting in which no true relationship exists between queries and filters. We therefore construct a \emph{null workload} that preserves selectivity while removing any systematic alignment between metadata and geometry.
 
@@ -727,10 +727,7 @@ To obtain a target selectivity \(s\), we sort the synthetic attribute values and
 Queries are sampled from the query workload, while predicates are sampled independently from the synthetic metadata. Since queries and predicates are independent by construction, any measured correlation score under this workload should be attributable to chance rather than genuine query--filter alignment.
 
 \subsection{Monte Carlo Null Calibration.}
-The null distribution of these heuristic scores is difficult to write down
-analytically because it depends on the empirical metadata distribution, the
-cluster assignment of sampled queries, the histogram binning, and the random
-range construction. Therefore, we estimate it by Monte Carlo simulation.
+The null distribution of the correlation scores is difficult to characterize analytically, as it depends on several interacting factors, including the empirical metadata distribution, the cluster assignments of sampled queries, the histogram discretization, and the stochastic construction of random range predicates. We therefore estimate this distribution empirically using Monte Carlo simulation.
 Let 
 \[
 c(q,\phi)
@@ -782,3 +779,6 @@ c(q,\phi) <
 \]
 
 \subsection{$\tau(s)$ as a Function of Selectivity}
+To obtain a selectivity-dependent threshold, we repeat the Monte Carlo calibration procedure over a grid of selectivity levels \(s\). For each level, we construct a corresponding null workload and estimate the threshold \(\hat{\tau}_s\) using the procedure described above.
+
+The resulting calibration pairs \((s,\hat{\tau}_s)\) are then used to fit a smooth function \(\tau(s)\) across selectivities. During inference, this fitted curve provides the appropriate threshold for any query with selectivity \(s\).
