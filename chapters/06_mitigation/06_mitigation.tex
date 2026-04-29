@@ -312,23 +312,34 @@ Based on these observations, we define the following routing policy:
 \[
 \textsc{Plan}(q,\phi)=
 \begin{cases}
-\text{PRE-FILTER}, & s < 5\%, \\[4pt]
-\text{POST-FILTER}, & s \geq 5\% \text{ and } c \in \{\text{positive},\text{random}\}, \\[4pt]
-\text{ACORN}, & s \geq 5\% \text{ and } c = \text{negative}.
+\text{PRE-FILTER},
+& s < 5\%, \\[6pt]
+
+\text{ACORN},
+& c=\text{negative} \land s \ge 5\%, \\[4pt]
+
+\text{ACORN},
+& c=\text{random} \land 5\% \le s < 10\%, \\[6pt]
+
+\text{POST-FILTER},
+& c=\text{positive} \land s \ge 5\%, \\[4pt]
+
+\text{POST-FILTER},
+& c=\text{random} \land s \ge 10\%.
 \end{cases}
 \]
 
 Although intentionally simple, this planner demonstrates how lightweight correlation estimates can be integrated into execution-time routing decisions for filtered vector search.
 
 
-\section{Test set}
-We now evaluate the routing heuristic on a held-out workload of 10{,}000 queries. The goal of this experiment is to compare the adaptive planner against the three fixed execution strategies discussed earlier, namely PRE-FILTER, POST-FILTER, and ACORN.
+\section{Test Set}
+We now evaluate the routing heuristic on a held-out workload of \(10{,}000\) queries. The objective is to compare the adaptive planner with the three fixed execution strategies introduced earlier: PRE-FILTER, POST-FILTER, and ACORN.
 
-For each query, we first sample a target filter selectivity uniformly from the interval \([0.0001, 0.4]\), corresponding to predicates that retain between \(0.01\%\) and \(40\%\) of the dataset. We then construct a concrete attribute interval whose realized selectivity is as close as possible to the sampled target. This yields a heterogeneous test workload spanning both highly selective and comparatively broad filters.
+For each query, we first sample a target filter selectivity uniformly from the interval \([0.0001, 0.5]\), corresponding to predicates that retain between \(0.01\%\) and \(50\%\) of the dataset. We then select a predicate center value uniformly at random from the global attribute distribution and construct an attribute interval around this center whose cardinality matches the sampled target as closely as possible. For every resulting query--predicate pair, we compute the exact filtered top-\(100\) nearest neighbors and use these results as ground truth for recall evaluation.
 
-As in the previous experiments, evaluation is performed against exact filtered ground truth. For every query, we compute the exact top-\(100\) nearest neighbors under the corresponding filter predicate and use these results to measure recall.
+This procedure decouples query vectors from predicate generation. The vector query is drawn from the held-out query set, while the filter predicate is sampled independently from the global attribute distribution. Consequently, the workload spans a broad spectrum of predicate selectivities without artificially favoring or disadvantaging any particular execution strategy.
 
-The adaptive planner operates in two stages. In the routing stage, it estimates the correlation regime of each query--predicate pair and assigns the query to one of the three execution strategies. In the execution stage, the selected strategy is run and its output is compared with the exact ground truth. This separation allows us to report both the end-to-end runtime of the planner and the cost of the routing decision itself.
+The adaptive planner operates in two stages. In the \textbf{routing} stage, it estimates the correlation regime of each query--predicate pair and assigns the query to one of the three execution strategies. In the \textbf{execution} stage, the selected strategy is run, and its output is compared against the exact ground truth.
 
 \paragraph{Heuristic}
 
@@ -351,7 +362,7 @@ Table~\ref{tab:test-set-strategy-metrics} summarizes the aggregate results. PRE-
     \label{tab:test-set-strategy-metrics}
 \end{table}
 
-The planner's routing decisions are shown in Table~\ref{tab:planner-routing-test}. Most queries are assigned to ACORN, while a substantial fraction is routed to POST-FILTER and only a relatively small subset is delegated to PRE-FILTER. This pattern is consistent with the planner design from Section~\ref{sec:tau-estimation}: PRE-FILTER is reserved for the most selective cases, whereas the remaining workload is separated according to estimated correlation structure.
+The planner's routing decisions are shown in Table~\ref{tab:planner-routing-test}. This pattern is consistent with the planner design from Section~\ref{sec:tau-estimation}: PRE-FILTER is reserved for the most selective cases, whereas the remaining workload is separated according to estimated correlation structure.
 
 \begin{table}[H]
     \centering
@@ -365,11 +376,11 @@ The planner's routing decisions are shown in Table~\ref{tab:planner-routing-test
         ACORN & 4987 \\
         \bottomrule
     \end{tabular}
-    \caption{Routing distribution of the adaptive planner on the test workload.}
+    \caption{Routing distribution of the heuristic adaptive planner on the test workload.}
     \label{tab:planner-routing-test}
 \end{table}
 
-Table~\ref{tab:planner-correlation-test} further shows the inferred correlation regimes. In this workload, the heuristic classifies \(4081\) queries as positively correlated and \(5919\) as negatively correlated, while no queries are assigned to the random regime. This outcome is expected, since the test workload is generated from the correlated dataset construction described in Section~\ref{sec:correlated-attribute-generation}. In other words, the metadata attributes were explicitly designed to exhibit structure relative to the embedding space, so the planner encounters queries that are predominantly either favorable or unfavorable for filtering, rather than truly random with respect to the vector neighborhood. Under this setup, the heuristic effectively makes a binary distinction between positive and negative correlation for planning purposes.
+Table~\ref{tab:planner-correlation-test} further shows the inferred correlation regimes. In this workload, the heuristic classifies \(4081\) queries as positively correlated and \(5919\) as negatively correlated, while no queries are assigned to the random regime. This outcome is expected, since the test workload is generated from the correlated dataset construction described in Section~\ref{sec:correlated-attribute-generation}. In other words, the metadata attributes were explicitly designed to exhibit structure relative to the embedding space, so the planner encounters queries that are predominantly either favorable or unfavorable for filtering.
 
 \begin{table}[H]
     \centering
@@ -383,7 +394,7 @@ Table~\ref{tab:planner-correlation-test} further shows the inferred correlation 
         Negative & 5919 \\
         \bottomrule
     \end{tabular}
-    \caption{Correlation regimes inferred by the adaptive planner on the test workload.}
+    \caption{Correlation regimes inferred by the heuristic adaptive planner on the test workload.}
     \label{tab:planner-correlation-test}
 \end{table}
 
@@ -392,15 +403,13 @@ Figure~\ref{fig:strategy-comparison-test} highlights the central outcome of this
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{figures/test/strategy_comparison_q10000_topk100.png}
-    \caption{Performance comparison of the three fixed strategies and the adaptive planner on the 10{,}000-query test workload.}
+    \caption{Performance comparison of the three fixed strategies and the heuristic adaptive planner on the 10{,}000-query test workload.}
     \label{fig:strategy-comparison-test}
 \end{figure}
 
 \paragraph{Tanh}
 
-Replacing the heuristic score with the continuous tanh-based metric yields nearly identical planning quality, while slightly improving throughput. As shown in Table~\ref{tab:test-set-tanh}, the planner reaches \(0.9069\) recall at \(896.15\) QPS, which is the highest throughput among all tested planner variants.
-
-The routing pattern remains stable: \(1217\) queries are assigned to PRE-FILTER, \(3823\) to POST-FILTER, and \(4960\) to ACORN. In contrast to the heuristic metric, tanh retains correlation magnitude, so a small number of borderline cases are classified as random rather than decisively positive or negative.
+Replacing the sign-based heuristic with the continuous tanh metric preserves the same overall speed--accuracy trade-off while slightly improving throughput. As shown in Table~\ref{tab:test-set-tanh}, the planner reaches \(0.9069\) recall at \(896.15\) QPS, making it the fastest planner variant in this experiment.
 
 \begin{table}[H]
     \centering
@@ -419,18 +428,52 @@ The routing pattern remains stable: \(1217\) queries are assigned to PRE-FILTER,
     \label{tab:test-set-tanh}
 \end{table}
 
+The routing distribution changes only modestly relative to the heuristic planner: the PRE-FILTER route is unchanged, while a small number of queries shift between POST-FILTER and ACORN, as shown in Table~\ref{tab:test-set-tanh-routing}.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lc}
+        \toprule
+        Route & Queries \\
+        \midrule
+        PRE   & 1217 \\
+        POST  & 3823 \\
+        ACORN & 4960 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Routing distribution of the tanh-based planner on the test workload.}
+    \label{tab:test-set-tanh-routing}
+\end{table}
+
+The main difference appears in the inferred correlation regimes, summarized in Table~\ref{tab:test-set-tanh-correlation}. Unlike the heuristic score, which uses only the sign of the lift once a query is deemed correlated, the tanh score preserves the magnitude of the lift. Queries whose local and global predicate probabilities are close therefore receive small scores and can fall inside the null-calibrated random band. This explains why tanh identifies a small random regime even though the heuristic assigns every query to either the positive or negative class.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lc}
+        \toprule
+        Correlation Type & Queries \\
+        \midrule
+        Positive & 3984 \\
+        Random   & 197  \\
+        Negative & 5819 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Correlation regimes inferred by the tanh-based planner on the test workload.}
+    \label{tab:test-set-tanh-correlation}
+\end{table}
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{figures/test/tanh_strategy_comparison_q10000_topk100.png}
-    \caption{Strategy comparison for the tanh-based planner.}
+    \caption{Strategy comparison for the tanh-based planner on the 10{,}000-query test workload.}
     \label{fig:test-set-tanh}
 \end{figure}
 
 \paragraph{Pgap}
 
-Using the probability-gap metric leads to similarly strong results. Table~\ref{tab:test-set-pgap} shows that the planner attains \(0.9070\) recall at \(878.36\) QPS, again outperforming the fixed ACORN baseline in throughput while preserving essentially the same accuracy.
-
-Routing decisions are highly consistent with the tanh variant, confirming that planner behavior is robust to the precise functional form of the metric.
+The probability-gap metric yields a similar outcome. Table~\ref{tab:test-set-pgap} shows that the planner attains \(0.9070\) recall at \(878.36\) QPS, again matching ACORN's recall while improving throughput. Its performance is slightly below the tanh variant but remains well above the fixed ACORN baseline.
 
 \begin{table}[H]
     \centering
@@ -449,18 +492,54 @@ Routing decisions are highly consistent with the tanh variant, confirming that p
     \label{tab:test-set-pgap}
 \end{table}
 
+The routing distribution in Table~\ref{tab:test-set-pgap-routing} is close to the tanh variant, confirming that the adaptive planner's execution choices are robust across continuous correlation metrics.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lc}
+        \toprule
+        Route & Queries \\
+        \midrule
+        PRE   & 1217 \\
+        POST  & 3805 \\
+        ACORN & 4978 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Routing distribution of the pgap-based planner on the test workload.}
+    \label{tab:test-set-pgap-routing}
+\end{table}
+
+The pgap correlation regimes are shown in Table~\ref{tab:test-set-pgap-correlation}. Compared with tanh, pgap marks slightly more queries as random. This is expected because pgap depends directly on the difference \(p_c - p_g\), rather than only on the direction of the lift. When the predicate probability inside the query's local region is close to its global probability, the score is naturally damped, even if the sign is positive or negative. 
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lc}
+        \toprule
+        Correlation Type & Queries \\
+        \midrule
+        Positive & 3958 \\
+        Random   & 252  \\
+        Negative & 5790 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Correlation regimes inferred by the pgap-based planner on the test workload.}
+    \label{tab:test-set-pgap-correlation}
+\end{table}
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{figures/test/pgap_strategy_comparison_q10000_topk100.png}
-    \caption{Strategy comparison for the pgap-based planner.}
+    \caption{Strategy comparison for the pgap-based planner on the 10{,}000-query test workload.}
     \label{fig:test-set-pgap}
 \end{figure}
 
 \paragraph{Comparison}
 
-Table~\ref{tab:test-set-metric-comparison} compares all three planner variants directly. Despite the differing score definitions, recall remains virtually unchanged across metrics, lying between \(0.9069\) and \(0.9070\). Throughput varies only moderately, with tanh achieving the best result.
+Table~\ref{tab:test-set-metric-comparison} compares the three planner variants. All three give almost the same recall, between \(0.9069\) and \(0.9070\). Their throughput is also close, although tanh is the fastest in this experiment.
 
-This confirms that planner quality depends primarily on correctly identifying the direction of correlation rather than estimating its exact magnitude. Once correlation is mapped into routing decisions, the three metrics become operationally very similar.
+The main difference is how each metric handles borderline cases. The heuristic metric is more decisive: it classifies every non-PRE query as either positively or negatively correlated. Because of this, it has no random cases. Tanh and pgap are softer metrics. They keep track of how strong the correlation signal is, not just its sign. So when a query has only a weak correlation signal, tanh and pgap can classify it as random. This is why they have a small number of random cases, even though their final recall and routing decisions are very similar to the heuristic planner.
 
 \begin{table}[H]
     \centering
@@ -474,7 +553,7 @@ This confirms that planner quality depends primarily on correctly identifying th
         Pgap      & 878.36 & 0.9070 & 1217 & 3827 & 4956 & 252 \\
         \bottomrule
     \end{tabular}
-    \caption{Comparison of planner performance under different correlation metrics.}
+    \caption{Comparison of planner performance under different correlation metrics. PRE, POST, and ACORN are the selected execution routes. Random counts queries whose correlation signal is too weak to classify as clearly positive or negative.}
     \label{tab:test-set-metric-comparison}
 \end{table}
 
