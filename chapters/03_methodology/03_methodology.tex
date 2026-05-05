@@ -1,36 +1,121 @@
 \chapter{Methodology}\label{chap:methodology}
 
-This chapter describes the experimental methodology used in this thesis. Its purpose is to define the datasets and baseline implementations that form the basis of the empirical evaluation in later chapters.
-
-We consider both a controlled synthetic setting and a real-world dataset in order to study filtered vector search under different forms of metadata--embedding interaction. In addition, we specify the concrete implementations of the execution strategies introduced in Chapter~\ref{sec:execution-strategies}, namely pre-filtering, post-filtering, and ACORN.
-
-The goal of this chapter is therefore not to present results, but to make the experimental setup precise: which data is used, how vectors and metadata are represented, and how the compared search strategies are instantiated in our evaluation.
+This chapter describes the experimental methodology used in this thesis. 
+The goal is therefore not to present results, but to make the experimental setup precise: which data is used, how vectors and metadata are represented, and how the compared search strategies are implemented in our evaluation.
 
 \section{Datasets}\label{sec:dataset}
 
 We will evaluate our method on both synthetic and real-world data, allowing us to analyze its behavior under controlled conditions as well as in realistic settings.
 
-\subsection{SIFT1M.}
-As a benchmark for vector similarity search, we use the widely adopted \textsc{SIFT1M} dataset, introduced in~\cite{jegou2010product} and used in subsequent works such as ACORN~\cite{acorn}. 
-The dataset consists of one million vectors in $\mathbb{R}^{128}$, extracted using the Scale-Invariant Feature Transform (SIFT), a classical computer vision technique for representing local image descriptors.
+\subsection{Test set: \textsc{SIFT} with controlled attributes}\label{subsec:sift1m}
 
-\textsc{SIFT1M} is provided in two splits. The \emph{database} split contains $10^6$ vectors used for indexing, while the \emph{test} split contains $10^4$ query vectors, each accompanied by ground-truth nearest neighbors in the database under the Euclidean distance. 
+As a benchmark for vector similarity search, we use the widely adopted \textsc{SIFT1M} dataset, introduced in~\cite{jegou2010product} and used in subsequent works such as ACORN~\cite{acorn}.
+
+\textsc{SIFT1M} consists of vectors in $\mathbb{R}^{128}$ and is provided in two splits. The \emph{train} split contains $10^6$ vectors used for indexing, while the \emph{test} split contains $10^4$ query vectors, each accompanied by ground-truth nearest neighbors in the database under Euclidean distance.
 This standardized setup enables consistent evaluation of approximate nearest neighbor (ANN) search methods.
 
-Since \textsc{SIFT1M} does not include structured attributes, we augment it with synthetic attributes following the procedure described in Chapter~\ref{chap:dataset-construction}. 
+Since \textsc{SIFT1M} does not include structured attributes, we augment it with synthetic attributes following the procedure described in Chapter~\ref{chap:dataset-construction}.
 
-\subsection{Amazon Products Dataset.}
-To complement the controlled synthetic setting, we also evaluate our method on a real-world dataset with naturally occurring structured attributes. 
-For this purpose, we use the Amazon Products dataset~\cite{amazon-products}, a web-scraped collection of product listings from the Amazon website.
+\subsection{Validation set: \textsc{SIFT} \& \textsc{GIST} with predefined attributes.}\label{subsec:sift-and-gist}
+We validate using the SIFT and GIST workloads introduced in the SIEVE benchmark repository.\footnote{\url{https://github.com/BillyZhaohengLi/SIEVE-vldb25/tree/main/biganntest}}. 
+We already covered SIFT above, while GIST contains \(10^6\) base vectors in \(\mathbb{R}^{960}\) and \(10^3\) query
+vectors. Both datasets use Euclidean distance.
 
-The dataset is organized into category-specific CSV files covering 142 product categories, together with a consolidated file, \texttt{Amazon-Products.csv}, containing the full collection. 
-Each product entry includes textual and structured information such as the product name, main category, subcategory, image link, product link, rating, number of ratings, discount price, and actual price.
+The authors of SIEVE augment these vector datasets with synthetic numeric
+attributes. For each dataset, two synthetic numeric attribute columns are sampled
+independently from a standard normal distribution, \(\mathcal{N}(0,1)\), using a
+fixed random seed, and each column is then sorted. Thus each base vector receives
+two numeric attribute values.
 
-To construct vector representations, we embed the textual product information, in particular the product names, into a high-dimensional semantic space using a pre-trained embedding model. 
-As a result, each product is represented by a vector embedding capturing semantic similarity, together with structured metadata derived from the original listing.
+The query endpoints are not generated independently for every query. Instead,
+SIEVE first generates a collection of range-predicate templates. Each template
+corresponds to a fixed set of endpoint values, and therefore to a fixed pair of
+range predicates. Individual queries are then assigned one of these templates.
+The assignment follows a Zipf-like distribution: a few templates are selected
+many times and therefore appear in many queries, while most templates are
+selected only a small number of times. This makes the workload skewed, with some
+frequently repeated filter ranges and many rare filter ranges.
 
-Unlike the synthetic attributes generated for \textsc{SIFT1M}, the structured attributes in this dataset arise naturally from the data and are not designed to follow any prescribed correlation with the embedding space. 
-This makes the dataset suitable for evaluating the robustness of our method under realistic conditions, where the relationship between vector similarity and structured attributes is unknown, heterogeneous, and potentially noisy.
+For SIFT, the query endpoints are sampled from \(\mathcal{N}(0,1)\), the same
+standard deviation used for the base attributes. For GIST, the query endpoints
+are sampled from a narrower normal distribution, i.e. with a smaller standard deviation.
+As a result, GIST endpoints are more concentrated near zero and usually define
+narrower range predicates.
+
+We build our validation dataset based on this setup. Since this thesis considers
+only one filter predicate, we project the SIEVE multi-attribute predicate to a
+scalar range workload by using only the first numeric attribute column. For a
+query with first-column range endpoints \((a,b)\), the predicate is
+\[
+    a_{\min} \le x_{\mathrm{attr}} \le a_{\max},
+    \qquad
+    a_{\min}=\min(a,b),\quad a_{\max}=\max(a,b).
+\]
+
+The resulting selectivity distributions are quite different for SIFT and GIST.
+For SIFT, the first-column predicates are broad: selectivity ranges from
+\(0.001438\) to \(0.950836\), with median \(0.344014\) and mean \(0.376829\).
+For GIST, the predicates are much narrower: selectivity ranges from
+\(0.000186\) to \(0.195697\), with median \(0.056291\) and mean \(0.062607\).
+Thus SIFT stresses the planner over a wide selectivity range, including many
+medium and high-selectivity queries, while GIST concentrates the evaluation near
+the low-selectivity regime where pre-filtering and graph-based filtered search
+often behave very differently.
+
+\subsection{Validation set: F-Droid App Reviews.}\label{subsec:fdroid}
+We also evaluate on a real-world dataset derived from
+\texttt{app\_reviews} on Hugging Face.\footnote{\url{https://huggingface.co/datasets/sealuzh/app_reviews}}
+The dataset contains Android application reviews from F-Droid, an open-source
+application repository.
+
+The dataset contains \(277{,}936\) base vectors and \(10{,}000\) query vectors
+in \(\mathbb{R}^{384}\), and we use Euclidean distance. Each vector is
+associated with three integer attributes:
+\[
+    \texttt{text\_length},\quad \texttt{unixtime},\quad \texttt{star}.
+\]
+We evaluate two separate attribute filters: one based on review length and one
+based on star rating.
+
+The first workload uses the length of the review text as a numeric attribute.
+For a query review of length \(\ell_q\), the filter is
+\[
+    \ell_q - 30 \le \ell \le \ell_q + 30 .
+\]
+This predicate selects reviews whose lengths are close to the query review
+length. The base review lengths range from \(1\) to \(2335\), with median \(26\)
+and mean \(63.29\); the query review lengths have a similar distribution, with
+median \(25\) and mean \(63.05\). Because many reviews are short, the
+\(\pm 30\) window is often broad relative to the empirical length distribution.
+The resulting per-query selectivity ranges from \(2.52\times 10^{-5}\) to
+\(0.703684\), with median \(0.575212\) and mean \(0.440713\). This workload
+therefore tests a real numeric attribute with a highly skewed distribution:
+some long-review queries are extremely selective, while many short-review
+queries match a large fraction of the database.
+
+The second workload uses the discrete star rating. Rather than filtering by
+exact equality, we use star-dependent rating ranges:
+\[
+\begin{array}{c|c}
+\text{query star} & \text{accepted base stars} \\
+\hline
+1 & \{1,2\} \\
+2 & \{1,2\} \\
+3 & \{3,4\} \\
+4 & \{3,4,5\} \\
+5 & \{4,5\}.
+\end{array}
+\]
+This construction groups ratings into low-, middle-, and high-rating bands. The
+base set is strongly skewed toward positive reviews: it contains \(38{,}571\)
+one-star, \(12{,}819\) two-star, \(22{,}340\) three-star, \(35{,}932\)
+four-star, and \(168{,}274\) five-star reviews. Consequently, the star filters
+have discrete, moderate-to-high selectivities. The \(\{1,2\}\) range selects
+\(18.49\%\) of the base set, \(\{3,4\}\) selects \(20.97\%\),
+\(\{3,4,5\}\) selects \(81.51\%\), and \(\{4,5\}\) selects \(73.47\%\).
+Across the query workload, the median star-filter selectivity is \(0.734723\)
+and the mean is \(0.599294\).
+
 
 \section{Implementation Details}\label{subsec:implementation-details}
 For the execution strategies, expanding on what we dicussed in \ref{sec:execution-strategies} we will use the following implementations:

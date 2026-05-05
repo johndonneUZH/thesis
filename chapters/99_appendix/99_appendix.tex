@@ -1,54 +1,147 @@
 \chapter{Appendix}
 
-\section{Additional Null Calibration Plots}
+\section{Null Calibration Plots}
 \label{app:tau-calibration-plots}
 
 We show the remaining selectivity-specific null calibration plots for the tanh and pgap metrics.
 
-\subsection{Tanh Metric}
-\label{app:tau-tanh}
+\begin{center}
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/sel50/tau/tau_null_sel0p5_q10000_topk100_tanh.png}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth]{figures/sel50/tau/tau_null_sel0p5_q10000_topk100_tanh.png}
-    \caption{Estimated $\tau(s)$ for the tanh metric at $50\%$ selectivity.}
+    \vspace{0.4em}
+    \refstepcounter{figure}
     \label{fig:tau-tanh-50}
-\end{figure}
+    \parbox{0.92\textwidth}{\centering\small
+    \textbf{Figure~\thefigure:} Estimated $\tau(s)$ for the tanh metric at $50\%$ selectivity.}
+\end{center}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth]{figures/sel1/tau/tau_null_sel0p01_q10000_topk100_tanh.png}
-    \caption{Estimated $\tau(s)$ for the tanh metric at $1\%$ selectivity.}
+\begin{center}
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/sel1/tau/tau_null_sel0p01_q10000_topk100_tanh.png}
+
+    \vspace{0.4em}
+    \refstepcounter{figure}
     \label{fig:tau-tanh-1}
-\end{figure}
+    \parbox{0.92\textwidth}{\centering\small
+    \textbf{Figure~\thefigure:} Estimated $\tau(s)$ for the tanh metric at $1\%$ selectivity.}
+\end{center}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth]{figures/sel0p1/tau/tau_null_sel0p001_q10000_topk100_tanh.png}
-    \caption{Estimated $\tau(s)$ for the tanh metric at $0.1\%$ selectivity.}
+\begin{center}
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/sel0p1/tau/tau_null_sel0p001_q10000_topk100_tanh.png}
+
+    \vspace{0.4em}
+    \refstepcounter{figure}
     \label{fig:tau-tanh-0p1}
-\end{figure}
+    \parbox{0.92\textwidth}{\centering\small
+    \textbf{Figure~\thefigure:} Estimated $\tau(s)$ for the tanh metric at \(0.1\%\) selectivity.}
+\end{center}
 
-\subsection{Pgap Metric}
-\label{app:tau-pgap}
+\begin{center}
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/sel50/tau/tau_null_sel0p5_q10000_topk100_pgap.png}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth]{figures/sel50/tau/tau_null_sel0p5_q10000_topk100_pgap.png}
-    \caption{Estimated $\tau(s)$ for the pgap metric at $50\%$ selectivity.}
+    \vspace{0.4em}
+    \refstepcounter{figure}
     \label{fig:tau-pgap-50}
-\end{figure}
+    \parbox{0.92\textwidth}{\centering\small
+    \textbf{Figure~\thefigure:} Estimated $\tau(s)$ for the pgap metric at \(50\%\) selectivity.}
+\end{center}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth]{figures/sel1/tau/tau_null_sel0p01_q10000_topk100_pgap.png}
-    \caption{Estimated $\tau(s)$ for the pgap metric at $1\%$ selectivity.}
+\begin{center}
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/sel1/tau/tau_null_sel0p01_q10000_topk100_pgap.png}
+
+    \vspace{0.4em}
+    \refstepcounter{figure}
     \label{fig:tau-pgap-1}
-\end{figure}
+    \parbox{0.92\textwidth}{\centering\small
+    \textbf{Figure~\thefigure:} Estimated $\tau(s)$ for the pgap metric at \(1\%\) selectivity.}
+\end{center}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth]{figures/sel0p1/tau/tau_null_sel0p001_q10000_topk100_pgap.png}
-    \caption{Estimated $\tau(s)$ for the pgap metric at $0.1\%$ selectivity.}
+\begin{center}
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/sel0p1/tau/tau_null_sel0p001_q10000_topk100_pgap.png}
+
+    \vspace{0.4em}
+    \refstepcounter{figure}
     \label{fig:tau-pgap-0p1}
-\end{figure}
+    \parbox{0.92\textwidth}{\centering\small
+    \textbf{Figure~\thefigure:} Estimated $\tau(s)$ for the pgap metric at \(0.1\%\) selectivity.}
+\end{center}
+
+
+\section{App review validation results}
+\label{sec:appendix-validation-full}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{llrrr}
+    \toprule
+    Attribute & Strategy & Time (s) & QPS & Recall@100 \\
+    \midrule
+    Star rating & PRE     & 83.7134 & 119.46  & 0.9235 \\
+    Star rating & POST    & 4.7705  & 2096.20 & 0.6203 \\
+    Star rating & ACORN   & 12.0417 & 830.45  & 0.7865 \\
+    Star rating & PLANNER & 11.2053 & 892.44  & 0.6658 \\
+    \midrule
+    Text length & PRE     & 70.9135 & 141.02  & 0.8783 \\
+    Text length & POST    & 8.1104  & 1232.99 & 0.6528 \\
+    Text length & ACORN   & 9.0493  & 1105.06 & 0.7729 \\
+    Text length & PLANNER & 8.8599  & 1128.69 & 0.7056 \\
+    \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+\refstepcounter{table}
+\label{tab:appendix-validation-app-reviews-heuristic-full}
+\parbox{0.92\textwidth}{\centering\small
+\textbf{Table~\thetable:} Full validation strategy metrics for \(c_{\mathrm{heur}}\) on the app review validation sets.}
+\end{center}
+
+
+\begin{center}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{llrrr}
+    \toprule
+    Attribute & Strategy & Time (s) & QPS & Recall@100 \\
+    \midrule
+    Star rating & PRE     & 101.9980 & 98.04   & 0.9235 \\
+    Star rating & POST    & 4.2117   & 2374.35 & 0.6203 \\
+    Star rating & ACORN   & 10.0550  & 994.54  & 0.7838 \\
+    Star rating & PLANNER & 7.4549   & 1341.41 & 0.6681 \\
+    \midrule
+    Text length & PRE     & 56.2540  & 177.77  & 0.8783 \\
+    Text length & POST    & 17.7247  & 564.18  & 0.6528 \\
+    Text length & ACORN   & 20.1574  & 496.10  & 0.7613 \\
+    Text length & PLANNER & 14.5381  & 687.85  & 0.6943 \\
+    \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+\refstepcounter{table}
+\label{tab:appendix-validation-app-reviews-tanh-full}
+\parbox{0.92\textwidth}{\centering\small
+\textbf{Table~\thetable:} Full validation strategy metrics for \(c_{\mathrm{tanh}}\) on the app review validation sets.}
+\end{center}
+
+
+\begin{center}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{llrrr}
+    \toprule
+    Attribute & Strategy & Time (s) & QPS & Recall@100 \\
+    \midrule
+    Star rating & PRE     & 52.8820 & 189.10  & 0.9235 \\
+    Star rating & POST    & 2.0408  & 4900.15 & 0.6203 \\
+    Star rating & ACORN   & 3.1740  & 3150.57 & 0.7946 \\
+    Star rating & PLANNER & 3.2970  & 3033.10 & 0.6658 \\
+    \midrule
+    Text length & PRE     & 88.9244 & 112.46  & 0.8783 \\
+    Text length & POST    & 8.9554  & 1116.64 & 0.6528 \\
+    Text length & ACORN   & 11.1030 & 900.66  & 0.7707 \\
+    Text length & PLANNER & 12.0337 & 831.00  & 0.6969 \\
+    \bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+\refstepcounter{table}
+\label{tab:appendix-validation-app-reviews-pgap-full}
+\parbox{0.92\textwidth}{\centering\small
+\textbf{Table~\thetable:} Full validation strategy metrics for \(c_{\mathrm{pgap}}\) on the app review validation sets.}
+\end{center}

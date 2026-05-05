@@ -1,3 +1,12 @@
 \begin{abstract}
-% Add your abstract here
+Filtered vector search combines similarity search over high-dimensional embeddings with structured predicates over metadata. 
+The performance of such queries depends not only on predicate selectivity, 
+but also on how the structured filter relates to the local geometry of the embedding space. 
+When qualifying points are concentrated near the query, independent of it, 
+or mostly absent from its neighborhood, 
+different execution strategies can lead to different trade-offs between recall and efficiency.
+
+This thesis studies attribute-embedding correlation as a signal for query planning in filtered vector search. 
+It introduces a lightweight metric that estimates whether a structured filter is aligned with the local neighborhood of a query in the embedding space. 
+The metric is calibrated without manual labels and is used to classify query-filter pairs into correlation regimes that can guide the choice of execution strategy.
 \end{abstract}

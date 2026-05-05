@@ -1,17 +1,45 @@
 \chapter{Introduction}
 \section{Motivation and Problem Setting}
 
-Consider a user searching for a shirt similar to a high-end item, but with a price below a given threshold (e.g., under 30). This query combines two components: similarity, to find visually or stylistically related items, and filtering, to enforce a constraint on structured attributes such as price.
+Consider a user searching for a shirt that is visually similar to a high-end item, but costs less than a given threshold, for example under 30.
+This query combines two requirements: a vector-similarity condition, which retrieves visually or stylistically related items, and a structured predicate, which restricts the result set by an attribute such as price.
 
-This type of query is representative of modern applications, where vector search is combined with structured predicates. In such settings, the goal is not only to retrieve similar items, but to do so within a restricted subset of the data.
+Queries of this form are common in modern retrieval systems, where unstructured similarity search is combined with structured filtering.
+The system must retrieve items that are close to the query in the embedding space, while also satisfying the user-specified filter.
+The challenge is therefore not only to find similar items, but to find similar items inside a restricted subset of the data.
 
-Processing these queries efficiently is challenging. While vector search techniques exploit the geometric structure of the embedding space, filtering restricts the search to a subset of the data. This restriction not only reduces the number of candidate points, but can also change their distribution in the embedding space.
+A first factor that affects query cost is predicate selectivity.
+If the predicate is highly selective, only a small fraction of the dataset remains admissible.
+As a result, the search may need to inspect more candidates before it finds enough points that both satisfy the predicate and are close to the query.
+Lower selectivity therefore often increases retrieval cost.
 
-A key factor is how the filtered vectors are positioned relative to the query. In some cases, the filter selects vectors that are concentrated near the query, making them easy to retrieve. In other cases, they are located farther away, requiring the search to explore less relevant regions of the space.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/motivation_selectivity.png}
+    \caption{Effect of predicate selectivity on filtered vector search.}
+    \label{fig:motivation-selectivity}
+\end{figure}
 
-This difference reflects how structured attributes interact with the embedding space. When attributes and embeddings are aligned, filtering preserves the local neighborhood of the query. When they are not aligned, filtering disrupts this structure and makes the search more difficult.
+However, selectivity alone does not fully determine query difficulty.
+Two predicates with the same selectivity can behave very differently depending on where their valid points lie in the embedding space.
+If the filtered points are concentrated near the query, the search can recover valid nearest neighbors with little additional work.
+If they are mostly far from the query, the search must explore a larger and less relevant region of the index.
 
-Capturing this effect is essential for efficient query processing, as it directly influences how different execution strategies behave and how much work is required to retrieve relevant results.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/motivation_correlation.png}
+    \caption{Effect of attribute--embedding correlation.}
+    \label{fig:motivation-correlation}
+\end{figure}
+
+This second effect depends on the relationship between structured attributes and the embedding space.
+When the filter attribute is aligned with vector locality, filtering preserves the neighborhood around the query.
+In this case, the admissible set contains many points that the vector index would naturally explore.
+When the attribute is not aligned with the embedding space, filtering disrupts this neighborhood structure.
+The search may then encounter many nearby points that fail the predicate and must continue farther through the index.
+
+The central problem studied in this thesis is how to quantify this relationship between structured attributes and vector embeddings.
+Such a measure can help explain why filtered vector search queries with similar selectivity may have different costs, and it can support query-planning decisions between execution strategies such as pre-filtering, post-filtering, and hybrid graph-based search.
 
 \section{Research Gap}\label{sec:research-gap}
 
@@ -21,32 +49,15 @@ Starting from NHQ \cite{nhq}, prior work constructs such workloads by attaching 
 
 As a result, current approaches do not capture how filters and vectors interact in practice, and this effect remains largely unmodeled.
 
-\section{Research Objectives \& Questions}
+\section{Main goals}
 
-The main objective is to treat this relationship as a property of the data and to define a quantitative measure that captures how filter predicates relate to the vector distribution. This enables a more systematic understanding of how filtering affects nearest neighbor search.
+Metric proposal
+“How much does the local neighborhood of a query differ from the global dataset with respect to the attribute distribution?”
 
-This leads to the following research questions:
+Metric Evaluation
+How does the metric perform?
 
-\begin{itemize}
-    \item How can the relationship between filter predicates and the vector space be formally defined and measured?
-    \item How does this relationship affect the behavior and performance of hybrid search methods?
-    \item How can this information be used to improve query processing beyond assumptions of independence?
-\end{itemize}
+Metric Integration
+How can the metric be integrated into a real world system?
 
-The goal is to develop a general and system-independent framework that can be applied across different index structures and query execution methods, including both exact and approximate search.
-
-\section{Thesis Structure}
-
-The remainder of this thesis is organized as follows.
-
-Chapter 2 provides the necessary background and reviews related work. It introduces vector search, approximate nearest neighbor methods, and filtered vector search, including key concepts such as selectivity, correlation, and common execution strategies.
-
-Chapter 3 formalizes the problem setting by defining the data model, query model, and the objective of the study.
-
-Chapter 4 describes the construction of the datasets used in this thesis. In particular, it explains how both correlated and uncorrelated attributes are generated, as well as how query ranges and selectivity are controlled.
-
-Chapter 5 introduces the proposed correlation metric. It presents the comparison between local and global attribute distributions, the use of Jensen–Shannon divergence, and the incorporation of lift to capture query-dependent effects.
-
-Chapter 6 describes the system setup and the execution strategies considered, including pre-filtering, post-filtering, and inline filtering, along with implementation details.
-
-Chapter 7 outlines the experimental setup, including evaluation metrics and the computation of ground truth.
+How can it be used to enhance existing state-of-the-art filtered vector search techniques?

@@ -187,7 +187,7 @@ For example, Query 3 in Figure~\ref{fig:corr-10pct} has \texttt{true\_correlatio
 
 Although the heuristic is imperfect, computing the true correlation at runtime would require exact filtered nearest-neighbor evaluation at query time, which is impractical. We therefore accept a limited risk of misclassification in exchange for a lightweight runtime proxy.
 
-\paragraph{Why do tanh and pgap squish everything to 0 as we lower selectivity?}
+\paragraph{Why do tanh and pgap squish everything to 0 as we lower selectivity?}\label{par:shrink-toward-zero}
 As selectivity decreases, the interval \([l,u]\) becomes narrower and covers a smaller portion of the attribute domain. Consequently, the probability mass captured by the interval decreases for both the local cluster distribution and the global distribution. Writing the interval width as \(\Delta\), and considering a small range around value \(a\), we obtain the local approximations
 
 \[
@@ -268,7 +268,7 @@ For the tanh and pgap metrics, the null distribution changes more noticeably wit
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{figures/sel10/tau/tau_null_sel0p1_q10000_topk100_pgap.png}
-    \caption{Representative null calibration plot for the pgap metric at $10\%$ selectivity. The pgap score depends directly on the probability mass difference between the local and global distributions, so its null distribution varies with selectivity.}
+    \caption{Representative null calibration plot for the pgap metric at $10\%$ selectivity.}
     \label{fig:tau-pgap-main}
 \end{figure}
 
@@ -297,15 +297,31 @@ We do not explore this direction further in the present thesis, but it represent
 
 \section{Planner Design}
 
-We now construct a simple query planner that incorporates the estimated correlation structure between the query and filter predicate, as determined by the heuristic metric and its calibrated threshold.
+We now construct a simple query planner that incorporates the estimated
+correlation structure between the query and filter predicate, as determined by
+the heuristic metric and its calibrated threshold.
 
-Using the empirical results in Table~\ref{tab:performance-comparison}, together with the correlation analysis from Section~\ref{sec:correlation-analysis}, we identify which execution strategy performs best under different combinations of selectivity and correlation, and route queries accordingly.
+Using the empirical results in Table~\ref{tab:performance-comparison}, together
+with the correlation analysis from Section~\ref{sec:correlation-analysis}, we
+identify which execution strategy performs best under different combinations of
+selectivity and correlation, and route queries accordingly.
 
-For highly selective predicates (\(s < 1\%\)), PRE-FILTER is consistently preferred, as it achieves exact recall with very low latency.
+For highly selective predicates (\(s < 1\%\)), PRE-FILTER is consistently
+preferred, as it achieves exact recall with very low latency.
 
-For less selective predicates (\(s > 10\%\)), POST-FILTER performs well in positively correlated and approximately random regimes, but deteriorates substantially under negative correlation. In contrast, ACORN is more robust in negatively correlated settings, though its advantage diminishes as selectivity decreases.
+For less selective predicates (\(s > 10\%\)), POST-FILTER performs well in
+positively correlated and approximately random regimes, but deteriorates
+substantially under negative correlation. In contrast, ACORN is more robust and
+consistent across different correlated settings, although its advantage
+diminishes as selectivity increases.
 
-For the intermediate range (\(1\% \leq s \leq 10\%\)), we adopt a simple interpolation assumption: the efficiency of PRE-FILTER gradually decreases as selectivity increases, and its crossover point with POST-FILTER occurs at approximately \(5\%\) selectivity.
+For the intermediate range (\(1\% \leq s \leq 10\%\)), we adopt two simplifying
+assumptions. First, we assume that the efficiency of PRE-FILTER gradually
+decreases as selectivity increases, with a crossover with the other two methods
+at approximately \(5\%\) selectivity. Second, for approximately random
+query-filter correlation, we assume that ACORN is preferable in the transition
+region \(5\% \le s < 10\%\), while POST-FILTER becomes preferable once
+selectivity reaches \(10\%\).
 
 Based on these observations, we define the following routing policy:
 
@@ -333,11 +349,26 @@ Although intentionally simple, this planner demonstrates how lightweight correla
 
 
 \section{Test Set}
-We now evaluate the routing heuristic on a held-out workload of \(10{,}000\) queries. The objective is to compare the adaptive planner with the three fixed execution strategies introduced earlier: PRE-FILTER, POST-FILTER, and ACORN.
 
-For each query, we first sample a target filter selectivity uniformly from the interval \([0.0001, 0.5]\), corresponding to predicates that retain between \(0.01\%\) and \(50\%\) of the dataset. We then select a predicate center value uniformly at random from the global attribute distribution and construct an attribute interval around this center whose cardinality matches the sampled target as closely as possible. For every resulting query--predicate pair, we compute the exact filtered top-\(100\) nearest neighbors and use these results as ground truth for recall evaluation.
+We evaluate the routing heuristic on a held-out workload of \(10{,}000\)
+queries. The goal is to compare the adaptive planner against the three fixed
+execution strategies introduced earlier: PRE-FILTER, POST-FILTER, and ACORN.
 
-This procedure decouples query vectors from predicate generation. The vector query is drawn from the held-out query set, while the filter predicate is sampled independently from the global attribute distribution. Consequently, the workload spans a broad spectrum of predicate selectivities without artificially favoring or disadvantaging any particular execution strategy.
+For each query, we generate an associated filter predicate as follows. First, we
+sample a target selectivity uniformly from \([0.0001, 0.5]\), corresponding to
+predicates that retain between \(0.01\%\) and \(50\%\) of the dataset. Next, we
+sample a predicate center uniformly from the empirical attribute distribution.
+We then construct an interval around this center whose cardinality is as close
+as possible to the sampled target selectivity.
+
+For each resulting query--predicate pair, we compute the exact filtered
+top-\(100\) nearest neighbors. These exact results serve as ground truth for
+the recall evaluation.
+
+This procedure decouples query vectors from predicate generation. As a result,
+the test workload covers a broad range of selectivities without being tied to a
+particular query--filter correlation pattern or artificially favoring any single
+execution strategy.
 
 The adaptive planner operates in two stages. In the \textbf{routing} stage, it estimates the correlation regime of each query--predicate pair and assigns the query to one of the three execution strategies. In the \textbf{execution} stage, the selected strategy is run, and its output is compared against the exact ground truth.
 
@@ -362,8 +393,6 @@ Table~\ref{tab:test-set-strategy-metrics} summarizes the aggregate results. PRE-
     \label{tab:test-set-strategy-metrics}
 \end{table}
 
-The planner's routing decisions are shown in Table~\ref{tab:planner-routing-test}. This pattern is consistent with the planner design from Section~\ref{sec:tau-estimation}: PRE-FILTER is reserved for the most selective cases, whereas the remaining workload is separated according to estimated correlation structure.
-
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.15}
@@ -380,8 +409,9 @@ The planner's routing decisions are shown in Table~\ref{tab:planner-routing-test
     \label{tab:planner-routing-test}
 \end{table}
 
-Table~\ref{tab:planner-correlation-test} further shows the inferred correlation regimes. In this workload, the heuristic classifies \(4081\) queries as positively correlated and \(5919\) as negatively correlated, while no queries are assigned to the random regime. This outcome is expected, since the test workload is generated from the correlated dataset construction described in Section~\ref{sec:correlated-attribute-generation}. In other words, the metadata attributes were explicitly designed to exhibit structure relative to the embedding space, so the planner encounters queries that are predominantly either favorable or unfavorable for filtering.
-
+Table~\ref{tab:planner-correlation-test} further shows the inferred correlation regimes. 
+Notably, no queries fall into the random one. This is expected since, as described in Section~\ref{sec:correlated-attribute-generation}, the attributes were explicitly designed to exhibit structure relative to the embedding space. 
+Thus, the planner encounters queries that are predominantly either favorable or unfavorable for filtering.
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.15}
@@ -446,7 +476,7 @@ The routing distribution changes only modestly relative to the heuristic planner
     \label{tab:test-set-tanh-routing}
 \end{table}
 
-The main difference appears in the inferred correlation regimes, summarized in Table~\ref{tab:test-set-tanh-correlation}. Unlike the heuristic score, which uses only the sign of the lift once a query is deemed correlated, the tanh score preserves the magnitude of the lift. Queries whose local and global predicate probabilities are close therefore receive small scores and can fall inside the null-calibrated random band. This explains why tanh identifies a small random regime even though the heuristic assigns every query to either the positive or negative class.
+The main difference with respect to before appears in the inferred correlation regimes, summarized in Table~\ref{tab:test-set-tanh-correlation}. 
 
 \begin{table}[H]
     \centering
@@ -492,7 +522,7 @@ The probability-gap metric yields a similar outcome. Table~\ref{tab:test-set-pga
     \label{tab:test-set-pgap}
 \end{table}
 
-The routing distribution in Table~\ref{tab:test-set-pgap-routing} is close to the tanh variant, confirming that the adaptive planner's execution choices are robust across continuous correlation metrics.
+The routing distribution in Table~\ref{tab:test-set-pgap-routing} is close to the tanh variant, while, as shown in Table~\ref{tab:test-set-pgap-correlation}, pgap marks slightly more queries as random. 
 
 \begin{table}[H]
     \centering
@@ -509,8 +539,6 @@ The routing distribution in Table~\ref{tab:test-set-pgap-routing} is close to th
     \caption{Routing distribution of the pgap-based planner on the test workload.}
     \label{tab:test-set-pgap-routing}
 \end{table}
-
-The pgap correlation regimes are shown in Table~\ref{tab:test-set-pgap-correlation}. Compared with tanh, pgap marks slightly more queries as random. This is expected because pgap depends directly on the difference \(p_c - p_g\), rather than only on the direction of the lift. When the predicate probability inside the query's local region is close to its global probability, the score is naturally damped, even if the sign is positive or negative. 
 
 \begin{table}[H]
     \centering
@@ -537,9 +565,11 @@ The pgap correlation regimes are shown in Table~\ref{tab:test-set-pgap-correlati
 
 \paragraph{Comparison}
 
-Table~\ref{tab:test-set-metric-comparison} compares the three planner variants. All three give almost the same recall, between \(0.9069\) and \(0.9070\). Their throughput is also close, although tanh is the fastest in this experiment.
+Table~\ref{tab:test-set-metric-comparison} compares the three planner variants. All methods achieve nearly identical recall. Throughput is similarly close across variants, with tanh performing slightly best in this experiment.
 
-The main difference is how each metric handles borderline cases. The heuristic metric is more decisive: it classifies every non-PRE query as either positively or negatively correlated. Because of this, it has no random cases. Tanh and pgap are softer metrics. They keep track of how strong the correlation signal is, not just its sign. So when a query has only a weak correlation signal, tanh and pgap can classify it as random. This is why they have a small number of random cases, even though their final recall and routing decisions are very similar to the heuristic planner.
+The main distinction lies in their routing behaviour, which follows directly from the score distributions. As discussed in Section~\ref{par:shrink-toward-zero}, increasing filter selectivity causes \(c_{\text{tanh}}\) and \(c_{\text{pgap}}\) to contract toward zero. As a result, more queries are effectively routed at random.
+
+This pattern is evident in the table. The heuristic planner never falls back to random routing, whereas tanh and pgap classify \(197\) and \(252\) queries as random, respectively. The number of ACORN assignments decreases slightly for these two variants.
 
 \begin{table}[H]
     \centering
@@ -553,21 +583,45 @@ The main difference is how each metric handles borderline cases. The heuristic m
         Pgap      & 878.36 & 0.9070 & 1217 & 3827 & 4956 & 252 \\
         \bottomrule
     \end{tabular}
-    \caption{Comparison of planner performance under different correlation metrics. PRE, POST, and ACORN are the selected execution routes. Random counts queries whose correlation signal is too weak to classify as clearly positive or negative.}
+    \caption{Comparison of planner performance under different correlation metrics.}
     \label{tab:test-set-metric-comparison}
 \end{table}
 
 \section{Validation set}
 
-We also validate the adaptive planner on the SIEVE benchmark data. The datasets and synthetic filter attributes are taken from the \texttt{biganntest} component of the SIEVE repository.\footnote{\url{https://github.com/BillyZhaohengLi/SIEVE-vldb25/tree/main/biganntest}} We use only the SIFT and GIST workloads. In our local copy, SIFT contains \(1{,}000{,}000\) base vectors of dimension \(128\) and \(10{,}000\) query vectors, while GIST contains \(1{,}000{,}000\) base vectors of dimension \(960\) and \(1{,}000\) query vectors. For both datasets we use the numeric synthetic attribute supplied with the benchmark, corresponding to \texttt{numeric\_range\_col0} in the validator output.
+\subsection{SIFT \& GIST}
+\label{subsec:sift-and-gist-validation}
 
-The validation setup is the same across all planner variants. For each query, exact filtered ground truth is computed and recall is measured at \(k=100\). We compare the adaptive planner against the three fixed execution strategies: PRE-FILTER, POST-FILTER, and ACORN. The planner first estimates the query--predicate correlation regime, then routes the query to one of the execution strategies. In this validation run, the planner includes an additional fallback for random-correlation queries: queries below the selectivity threshold are still routed to PRE-FILTER, but non-PRE queries classified as random are split evenly between POST-FILTER and ACORN. This avoids sending all uncertain cases to a single approximate strategy and makes the random regime operationally meaningful.
+We now validate the adaptive planner on the SIEVE benchmark data. 
+The validation setup is the same across all planner variants. As already discussed in Section~\ref{subsec:sift-and-gist}, the selectivity distributions differ substantially between the two datasets: SIFT contains broader predicates, while GIST contains narrower predicates. 
+For convenience, Table~\ref{tab:sieve-selectivity-summary} summarizes these workload-level selectivity statistics. 
+Since these values are fixed for each dataset, they are omitted from the planner-specific diagnostic tables below.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{lrrrr}
+        \toprule
+        Dataset & Sel. min & Sel. med. & Sel. mean & Sel. max \\
+        \midrule
+        SIFT & 0.001438 & 0.344014 & 0.376829 & 0.950836 \\
+        GIST & 0.000186 & 0.056291 & 0.062607 & 0.195697 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Selectivity summary for the SIFT and GIST validation workloads.}
+    \label{tab:sieve-selectivity-summary}
+\end{table}
 
 \paragraph{Heuristic metric.}
 
-Table~\ref{tab:validation-heuristic} reports the heuristic results for SIFT and GIST. On SIFT, POST-FILTER is the fastest fixed strategy, reaching \(2888.71\) QPS, but its recall is only \(0.8400\). ACORN improves recall to \(0.9183\), but is slower. The planner lands between these two strategies: it reaches \(1698.84\) QPS and \(0.8954\) recall, routing \(824\) queries to PRE-FILTER, \(4434\) to POST-FILTER, and \(4742\) to ACORN.
+Table~\ref{tab:validation-heuristic} shows that the heuristic planner behaves as intended on SIFT, but is less compelling on GIST.
+For SIFT, the planner successfully recovers much of the accuracy lost by POST-FILTER without paying the full cost of PRE-FILTER.
+Its routing decisions therefore produce a genuine compromise between the baseline strategies, even though they do not dominate any individual baseline on both metrics.
 
-On GIST, the routing pattern is different because nearly half of the queries fall below the PRE selectivity threshold. The planner routes \(492\) queries to PRE-FILTER, \(228\) to POST-FILTER, and \(280\) to ACORN. This gives the planner \(0.8891\) recall at \(489.84\) QPS, substantially improving over POST-FILTER recall while remaining faster than PRE-FILTER.
+The GIST results are more mixed.
+Here, ACORN is the strongest efficiency baseline, and the planner does not improve on it in runtime.
+Instead, the planner trades away some of ACORN's speed to recover a large amount of recall.
+This makes the planner useful when recall is important enough to justify the additional cost.
 
 \begin{table}[H]
     \centering
@@ -581,79 +635,62 @@ On GIST, the routing pattern is different because nearly half of the queries fal
         SIFT & ACORN   & 9.2208  & 1084.51 & 0.9183 & --  & --   & --   \\
         SIFT & PLANNER & 5.8864  & 1698.84 & 0.8954 & 824 & 4434 & 4742 \\
         \midrule
-        GIST & PRE     & 5.0079  & 199.68  & 1.0000 & --  & --  & --  \\
-        GIST & POST    & 4.4086  & 226.83  & 0.6912 & --  & --  & --  \\
-        GIST & ACORN   & 1.0587  & 944.59  & 0.7372 & --  & --  & --  \\
-        GIST & PLANNER & 2.0415  & 489.84  & 0.8891 & 492 & 228 & 280 \\
+        GIST & PRE     & 5.0079  & 199.68  & 1.0000 & --  & --   & --   \\
+        GIST & POST    & 4.4086  & 226.83  & 0.6912 & --  & --   & --   \\
+        GIST & ACORN   & 1.0587  & 944.59  & 0.7372 & --  & --   & --   \\
+        GIST & PLANNER & 2.0415  & 489.84  & 0.8891 & 492 & 228  & 280  \\
         \bottomrule
     \end{tabular}
-    \caption{Validation strategy metrics for the heuristic correlation metric.}
+    \caption{Validation strategy metrics for \(c_{\mathrm{heur}}\).}
     \label{tab:validation-heuristic}
 \end{table}
 
-Table~\ref{tab:validation-heuristic-diagnostics} gives the corresponding planner diagnostics. On SIFT, the heuristic identifies \(932\) negative and \(566\) positive cases, while \(8502\) queries remain random. On GIST, all \(1000\) queries fall inside the random band: the score range \([-2.74 \times 10^{-5}, 2.51 \times 10^{-5}]\) does not exceed the median decision threshold \(4.50 \times 10^{-5}\). Thus, for GIST, the planner's behavior is controlled almost entirely by the PRE selectivity threshold and the random-query split.
+Table~\ref{tab:validation-heuristic-diagnostics} provides more detail on the behaviour of the metric.
+On SIFT, the heuristic identifies \(932\) negative and \(566\) positive cases, while \(8502\) queries remain random.
+Thus, although most SIFT queries are still treated as random, the metric does provide a correlation signal for part of the workload.
+
+On GIST, all \(1000\) queries fall into the random category.
+The correlation scores are too small relative to the decision threshold: the full score range,
+\([-2.74 \times 10^{-5}, 2.51 \times 10^{-5}]\), stays below the median threshold of
+\(4.50 \times 10^{-5}\) in absolute value.
+
+Given how the synthetic attributes are constructed in Section~\ref{subsec:sift-and-gist}, this is more likely to reflect genuinely random behavior than a failure of the heuristic alone.
+In either case, the planner receives no correlation-based routing signal for GIST and is instead guided by the PRE selectivity threshold and by the routing rules for random queries.
 
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.12}
     \resizebox{\textwidth}{!}{
-    \begin{tabular}{lrrrrrrrrrrrr}
+    \begin{tabular}{lrrrrrrrrr}
         \toprule
-        Dataset & Neg. & Pos. & Rand. & Sel. min & Sel. med. & Sel. max & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
+        Dataset & Neg. & Pos. & Rand. & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
         \midrule
-        SIFT & 932 & 566 & 8502 & 0.001438 & 0.344014 & 0.950836
+        SIFT & 932 & 566 & 8502
              & \(3.02{\times}10^{-5}\) & \(3.07{\times}10^{-5}\) & \(3.08{\times}10^{-5}\)
              & \(-5.28{\times}10^{-5}\) & \(1.23{\times}10^{-5}\) & \(5.28{\times}10^{-5}\) \\
-        GIST & 0 & 0 & 1000 & 0.000186 & 0.056291 & 0.195697
+        GIST & 0 & 0 & 1000
              & \(4.13{\times}10^{-5}\) & \(4.50{\times}10^{-5}\) & \(6.30{\times}10^{-5}\)
              & \(-2.74{\times}10^{-5}\) & \(-3.63{\times}10^{-6}\) & \(2.51{\times}10^{-5}\) \\
         \bottomrule
     \end{tabular}}
-    \caption{Planner diagnostics from the heuristic validation CSVs.}
+    \caption{Planner diagnostics for \(c_{\mathrm{heur}}\) on the validation sets.}
     \label{tab:validation-heuristic-diagnostics}
 \end{table}
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment1/validator_planner_routing.png}
-        \caption{SIFT routing.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment1/validator_recall_vs_qps.png}
-        \caption{SIFT recall--QPS.}
-    \end{subfigure}
+\paragraph{Tanh and pgap metrics.}
 
-    \vspace{0.5em}
-    \includegraphics[width=0.85\textwidth]{figures/validator_out/experiment1/validator_strategy_metrics.png}
-    \caption{SIFT validation plots for the heuristic metric.}
-    \label{fig:validation-sift-heuristic}
-\end{figure}
+Tables~\ref{tab:validation-tanh} and~\ref{tab:validation-pgap} show that the tanh and pgap planners behave almost identically on the SIFT and GIST validation workloads.
+Their aggregate performance is close to the heuristic planner, but for a different reason: neither metric produces correlation-based routing decisions.
+As shown in Tables~\ref{tab:validation-tanh-diagnostics} and~\ref{tab:validation-pgap-diagnostics}, all queries are classified as random for both datasets and both metrics.
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment4/validator_planner_routing.png}
-        \caption{GIST routing.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment4/validator_recall_vs_qps.png}
-        \caption{GIST recall--QPS.}
-    \end{subfigure}
+The diagnostics show that the observed scores are far below the corresponding null-calibrated thresholds.
+For \(c_{\mathrm{tanh}}\), the SIFT scores range only from \(-1.67 \times 10^{-8}\) to \(3.18 \times 10^{-8}\), while the median threshold is \(2.99 \times 10^{-6}\).
+For \(c_{\mathrm{pgap}}\), the same pattern is even clearer: on SIFT, the score range is \([-1.43 \times 10^{-9}, 1.32 \times 10^{-9}]\), compared with a median threshold of \(9.41 \times 10^{-7}\).
+The GIST results show the same collapse toward zero.
 
-    \vspace{0.5em}
-    \includegraphics[width=0.85\textwidth]{figures/validator_out/experiment4/validator_strategy_metrics.png}
-    \caption{GIST validation plots for the heuristic metric.}
-    \label{fig:validation-gist-heuristic}
-\end{figure}
-
-\paragraph{Tanh metric.}
-
-The tanh metric produces very similar planner behavior, but the diagnostic columns show a stronger collapse toward zero. On SIFT, all \(10{,}000\) queries are classified as random. Consequently, after the \(824\) PRE-FILTER queries are removed, the remaining queries are split between POST-FILTER and ACORN, giving \(4575\) POST routes and \(4601\) ACORN routes. The planner reaches \(0.8941\) recall at \(1741.22\) QPS.
-
-The same qualitative behavior appears on GIST. All \(1000\) queries are classified as random under tanh. Since \(492\) queries are routed to PRE-FILTER by selectivity, the remaining \(508\) queries are split into \(228\) POST-FILTER routes and \(280\) ACORN routes. The planner obtains \(0.8899\) recall at \(446.31\) QPS.
+Thus, the planner performance of tanh and pgap should not be interpreted as evidence that these metrics detect useful correlation on SIFT or GIST.
+After the PRE selectivity rule routes the low-selectivity queries to PRE-FILTER, all remaining decisions are made by the fallback policy for random queries.
+In this validation setting, tanh and pgap therefore behave mainly as random-routing planners with a selectivity guard.
 
 \begin{table}[H]
     \centering
@@ -673,71 +710,29 @@ The same qualitative behavior appears on GIST. All \(1000\) queries are classifi
         GIST & PLANNER & 2.2406  & 446.31  & 0.8899 & 492 & 228 & 280 \\
         \bottomrule
     \end{tabular}
-    \caption{Validation strategy metrics for the tanh correlation metric.}
+    \caption{Validation strategy metrics for \(c_{\mathrm{tanh}}\).}
     \label{tab:validation-tanh}
 \end{table}
-
-Table~\ref{tab:validation-tanh-diagnostics} explains why every query is classified as random. For SIFT, the tanh scores range only from \(-1.67 \times 10^{-8}\) to \(3.18 \times 10^{-8}\), while the median threshold is \(2.99 \times 10^{-6}\). For GIST, the scores are even smaller, ranging from \(-2.10 \times 10^{-9}\) to \(2.26 \times 10^{-9}\), compared with a median threshold of \(1.11 \times 10^{-5}\). Thus, the tanh-transformed signal collapses toward zero relative to the decision threshold on these validation attributes.
 
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.12}
     \resizebox{\textwidth}{!}{
-    \begin{tabular}{lrrrrrrrrrrrr}
+    \begin{tabular}{lrrrrrrrrr}
         \toprule
-        Dataset & Neg. & Pos. & Rand. & Sel. min & Sel. med. & Sel. max & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
+        Dataset & Neg. & Pos. & Rand. & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
         \midrule
-        SIFT & 0 & 0 & 10000 & 0.001438 & 0.344014 & 0.950836
+        SIFT & 0 & 0 & 10000
              & \(2.03{\times}10^{-6}\) & \(2.99{\times}10^{-6}\) & \(2.76{\times}10^{-5}\)
              & \(-1.67{\times}10^{-8}\) & \(2.86{\times}10^{-11}\) & \(3.18{\times}10^{-8}\) \\
-        GIST & 0 & 0 & 1000 & 0.000186 & 0.056291 & 0.195697
+        GIST & 0 & 0 & 1000 
              & \(6.06{\times}10^{-6}\) & \(1.11{\times}10^{-5}\) & \(6.30{\times}10^{-5}\)
              & \(-2.10{\times}10^{-9}\) & \(-2.94{\times}10^{-12}\) & \(2.26{\times}10^{-9}\) \\
         \bottomrule
     \end{tabular}}
-    \caption{Planner diagnostics from the tanh validation CSVs.}
+    \caption{Planner diagnostics for \(c_{\mathrm{tanh}}\) on the validation sets.}
     \label{tab:validation-tanh-diagnostics}
 \end{table}
-
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment2/validator_planner_routing.png}
-        \caption{SIFT routing.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment2/validator_recall_vs_qps.png}
-        \caption{SIFT recall--QPS.}
-    \end{subfigure}
-
-    \vspace{0.5em}
-    \includegraphics[width=0.85\textwidth]{figures/validator_out/experiment2/validator_strategy_metrics.png}
-    \caption{SIFT validation plots for the tanh metric.}
-    \label{fig:validation-sift-tanh}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment5/validator_planner_routing.png}
-        \caption{GIST routing.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment5/validator_recall_vs_qps.png}
-        \caption{GIST recall--QPS.}
-    \end{subfigure}
-
-    \vspace{0.5em}
-    \includegraphics[width=0.85\textwidth]{figures/validator_out/experiment5/validator_strategy_metrics.png}
-    \caption{GIST validation plots for the tanh metric.}
-    \label{fig:validation-gist-tanh}
-\end{figure}
-
-\paragraph{Pgap metric.}
-
-The pgap metric also classifies all validation queries as random in both datasets. For SIFT, the planner therefore uses the same route counts as tanh: \(824\) PRE-FILTER, \(4575\) POST-FILTER, and \(4601\) ACORN. Its recall is \(0.8940\) at \(1657.59\) QPS. For GIST, the planner again routes \(492\) queries to PRE-FILTER and splits the non-PRE random cases between POST-FILTER and ACORN. It reaches \(0.8892\) recall at \(411.09\) QPS.
 
 \begin{table}[H]
     \centering
@@ -761,62 +756,207 @@ The pgap metric also classifies all validation queries as random in both dataset
     \label{tab:validation-pgap}
 \end{table}
 
-The pgap diagnostics in Table~\ref{tab:validation-pgap-diagnostics} show the same scale mismatch. For SIFT, the median pgap threshold is \(9.41 \times 10^{-7}\), whereas the observed scores range from \(-1.43 \times 10^{-9}\) to \(1.32 \times 10^{-9}\). For GIST, the scores range from \(-4.76 \times 10^{-11}\) to \(3.53 \times 10^{-11}\), while the median threshold is \(6.90 \times 10^{-7}\). As with tanh, all queries fall inside the random band.
-
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.12}
     \resizebox{\textwidth}{!}{
-    \begin{tabular}{lrrrrrrrrrrrr}
+    \begin{tabular}{lrrrrrrrrr}
         \toprule
-        Dataset & Neg. & Pos. & Rand. & Sel. min & Sel. med. & Sel. max & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
+        Dataset & Neg. & Pos. & Rand. & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
         \midrule
-        SIFT & 0 & 0 & 10000 & 0.001438 & 0.344014 & 0.950836
+        SIFT & 0 & 0 & 10000 
              & \(9.46{\times}10^{-8}\) & \(9.41{\times}10^{-7}\) & \(1.04{\times}10^{-6}\)
              & \(-1.43{\times}10^{-9}\) & \(3.93{\times}10^{-12}\) & \(1.32{\times}10^{-9}\) \\
-        GIST & 0 & 0 & 1000 & 0.000186 & 0.056291 & 0.195697
+        GIST & 0 & 0 & 1000 
              & \(6.31{\times}10^{-8}\) & \(6.90{\times}10^{-7}\) & \(1.13{\times}10^{-6}\)
              & \(-4.76{\times}10^{-11}\) & \(-5.04{\times}10^{-14}\) & \(3.53{\times}10^{-11}\) \\
         \bottomrule
     \end{tabular}}
-    \caption{Planner diagnostics from the pgap validation CSVs.}
+    \caption{Planner diagnostics for \(c_{\mathrm{pgap}}\) on the validation sets.}
     \label{tab:validation-pgap-diagnostics}
 \end{table}
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment3/validator_planner_routing.png}
-        \caption{SIFT routing.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment3/validator_recall_vs_qps.png}
-        \caption{SIFT recall--QPS.}
-    \end{subfigure}
 
-    \vspace{0.5em}
-    \includegraphics[width=0.85\textwidth]{figures/validator_out/experiment3/validator_strategy_metrics.png}
-    \caption{SIFT validation plots for the pgap metric.}
-    \label{fig:validation-sift-pgap}
+
+
+
+
+
+\subsection{App reviews}
+
+The \texttt{app\_reviews} validation set provides a more realistic test case than the synthetic SIFT and GIST attributes, since its filters are derived from attributes of the original data rather than assigned independently.
+The dataset is described in Section~\ref{subsec:fdroid}.
+The exact validation metrics for these workloads are reported in Appendix~\ref{sec:appendix-validation-full}.
+
+\paragraph{Overall result.}
+
+Across both app-review attributes, all three metrics detect non-random attribute--embedding structure.
+However, this signal does not translate into a consistently superior planner.
+POST-FILTER remains the fastest baseline, PRE-FILTER achieves the highest recall, and ACORN provides the strongest fixed speed--recall tradeoff.
+The adaptive planner is sometimes faster than ACORN, but usually loses too much recall to dominate it.
+
+The main limitation is therefore not the absence of correlation signal.
+Rather, the routing policy does not exploit the signal aggressively enough.
+Many queries are still routed to POST-FILTER, even though ACORN often provides a better recall-efficiency tradeoff on these workloads.
+
+\paragraph{Heuristic metric.}
+
+Figure~\ref{fig:valid-set-heur} and Table~\ref{tab:validation-app-reviews-heuristic} show that the heuristic planner detects useful structure, but does not exploit it strongly enough.
+On both attributes, the planner remains biased toward POST-FILTER.
+This makes it competitive in runtime, but limits the recall improvement that the correlation signal could provide.
+
+The effect is clearest for star rating, where the planner is only marginally slower than POST-FILTER but remains far below ACORN in recall.
+For text length, the routing is more balanced and the planner recovers more recall, but still not enough to match ACORN's tradeoff.
+Thus, the heuristic metric is informative, but the current routing rule underuses the stronger search strategy.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figures/app_review/heur/validator_strategy_metrics.png}
+    \caption{Strategy comparison for the heuristic planner.}
+    \label{fig:valid-set-heur}
 \end{figure}
 
-\begin{figure}[H]
+\begin{table}[!htbp]
     \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment6/validator_planner_routing.png}
-        \caption{GIST routing.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{figures/validator_out/experiment6/validator_recall_vs_qps.png}
-        \caption{GIST recall--QPS.}
-    \end{subfigure}
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{llrrr}
+        \toprule
+        Attribute & Strategy & PRE & POST & ACORN \\
+        \midrule
+        Star rating & PLANNER & 0   & 7366 & 2634 \\
+        Text length & PLANNER & 908 & 6621 & 2471 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Planner routing decisions for \(c_{\mathrm{heur}}\) on the app review validation sets.}
+    \label{tab:validation-app-reviews-heuristic}
+\end{table}
 
-    \vspace{0.5em}
-    \includegraphics[width=0.85\textwidth]{figures/validator_out/experiment6/validator_strategy_metrics.png}
-    \caption{GIST validation plots for the pgap metric.}
-    \label{fig:validation-gist-pgap}
+Table~\ref{tab:validation-app-reviews-heuristic-diagnostics} confirms that the heuristic metric detects a clear correlation signal.
+Most queries are classified as positive or negative rather than random, and the observed correlation values are much larger than the calibrated thresholds.
+This indicates that the app-review attributes are meaningfully related to the vector space.
+
+\begin{table}[!htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lrrrrrrrrr}
+        \toprule
+        Attribute & Neg. & Pos. & Rand. & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
+        \midrule
+        Star rating & 1795 & 6564 & 1641
+             & \(8.07{\times}10^{-2}\) & \(9.68{\times}10^{-2}\) & \(9.68{\times}10^{-2}\)
+             & \(-6.94{\times}10^{-1}\) & \(1.75{\times}10^{-1}\) & \(6.94{\times}10^{-1}\) \\
+        Text length & 1428 & 6316 & 2256
+             & \(1.13{\times}10^{-1}\) & \(1.20{\times}10^{-1}\) & \(1.20{\times}10^{-1}\)
+             & \(-2.93{\times}10^{-1}\) & \(1.62{\times}10^{-1}\) & \(2.93{\times}10^{-1}\) \\
+        \bottomrule
+    \end{tabular}}
+    \caption{Planner diagnostics for \(c_{\mathrm{heur}}\) on the app review validation sets.}
+    \label{tab:validation-app-reviews-heuristic-diagnostics}
+\end{table}
+
+\paragraph{Tanh and pgap metrics.}
+
+Figures~\ref{fig:valid-set-tanh} and~\ref{fig:valid-set-pgap} show the behavior of the tanh and pgap planners.
+Both variants follow the same broad pattern as the heuristic metric: they detect correlation signal, but do not produce a planner that consistently improves over the fixed baselines.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figures/app_review/tanh/validator_strategy_metrics.png}
+    \caption{Strategy comparison for the tanh-based planner.}
+    \label{fig:valid-set-tanh}
 \end{figure}
 
-Across the validation experiments, the planner consistently improves recall over POST-FILTER while remaining much faster than PRE-FILTER. On SIFT, the planner gives up some recall relative to ACORN but is substantially faster. On GIST, the planner is slower than ACORN but substantially more accurate because almost half of the workload is routed to exact PRE-FILTER. The most important diagnostic result is that tanh and pgap collapse toward zero relative to their decision thresholds on these SIEVE validation attributes, causing every query to be treated as random. The heuristic metric is slightly less collapsed on SIFT, but still leaves most queries in the random regime. Therefore, the random-routing fallback is not a minor edge case in this validation setting; it is the dominant mechanism controlling planner behavior.
+\begin{table}[!htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{llrrr}
+        \toprule
+        Attribute & Strategy & PRE & POST & ACORN \\
+        \midrule
+        Star rating & PLANNER & 0   & 7184 & 2816 \\
+        Text length & PLANNER & 908 & 7097 & 1995 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Planner routing decisions for \(c_{\mathrm{tanh}}\) on the app review validation sets.}
+    \label{tab:validation-app-reviews-tanh}
+\end{table}
+
+Table~\ref{tab:validation-app-reviews-tanh-diagnostics} shows that the tanh metric changes the classification balance.
+As discussed in Section~\ref{par:shrink-toward-zero}, the tanh term pushes weak local/global imbalances toward zero.
+This makes \(c_{\mathrm{tanh}}\) more conservative for weak correlations: if the queried range is only mildly overrepresented or underrepresented in the local cluster, the resulting score is reduced and may fall into the random class.
+This explains the star-rating workload, where several queries that were positive under the heuristic metric become random under \(c_{\mathrm{tanh}}\).
+
+For text length, however, some queries exhibit a much stronger local lift.
+That means the queried range contains substantially more probability mass inside the assigned cluster than in the global distribution.
+Even if the overall cluster distribution is still relatively close to the global distribution, the strong range-specific lift can be large enough to keep the tanh score above its lower null threshold.
+These queries may be random under \(c_{\mathrm{heur}}\), where the lift only contributes its sign and the score mainly depends on the JS divergence, but positive under \(c_{\mathrm{tanh}}\), where the strength of the lift also contributes.
+
+Thus, \(c_{\mathrm{tanh}}\) suppresses weak correlations by pushing them toward zero, but it can still classify queries as correlated when the queried range is strongly overrepresented in the local cluster.
+
+\begin{table}[!htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lrrrrrrrrr}
+        \toprule
+        Attribute & Neg. & Pos. & Rand. & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
+        \midrule
+        Star rating & 1688 & 6011 & 2301
+             & \(9.86{\times}10^{-3}\) & \(1.25{\times}10^{-2}\) & \(1.25{\times}10^{-2}\)
+             & \(-6.77{\times}10^{-1}\) & \(2.86{\times}10^{-2}\) & \(6.38{\times}10^{-1}\) \\
+        Text length & 1196 & 6778 & 2026
+             & \(1.22{\times}10^{-2}\) & \(1.22{\times}10^{-2}\) & \(1.13{\times}10^{-1}\)
+             & \(-2.65{\times}10^{-1}\) & \(4.44{\times}10^{-2}\) & \(2.14{\times}10^{-1}\) \\
+        \bottomrule
+    \end{tabular}}
+    \caption{Planner diagnostics for \(c_{\mathrm{tanh}}\) on the app review validation sets.}
+    \label{tab:validation-app-reviews-tanh-diagnostics}
+\end{table}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figures/app_review/pgap/validator_strategy_metrics.png}
+    \caption{Strategy comparison for the probability-gap planner.}
+    \label{fig:valid-set-pgap}
+\end{figure}
+
+\begin{table}[!htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{llrrr}
+        \toprule
+        Attribute & Strategy & PRE & POST & ACORN \\
+        \midrule
+        Star rating & PLANNER & 0   & 7405 & 2595 \\
+        Text length & PLANNER & 908 & 7043 & 2049 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Planner routing decisions for \(c_{\mathrm{pgap}}\) on the app review validation sets.}
+    \label{tab:validation-app-reviews-pgap}
+\end{table}
+
+Table~\ref{tab:validation-app-reviews-pgap-diagnostics} shows that pgap gives a classification pattern close to tanh, but not identical.
+Compared with \(c_{\mathrm{tanh}}\), the positive counts differ by a few hundred queries: \(6300\) versus \(6011\) for star rating, and \(6626\) versus \(6778\) for text length.
+This is expected because both metrics account for the strength of the local/global filter imbalance, but they scale that imbalance differently.
+As a result, they agree on the broad classification pattern while moving some borderline queries between groups.
+
+\begin{table}[!htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lrrrrrrrrr}
+        \toprule
+        Attribute & Neg. & Pos. & Rand. & \(\tau_{\min}\) & \(\tau_{\mathrm{med}}\) & \(\tau_{\max}\) & Corr. min & Corr. med. & Corr. max \\
+        \midrule
+        Star rating & 1531 & 6300 & 2169
+             & \(4.10{\times}10^{-3}\) & \(4.77{\times}10^{-3}\) & \(6.11{\times}10^{-3}\)
+             & \(-4.53{\times}10^{-1}\) & \(2.10{\times}10^{-2}\) & \(5.04{\times}10^{-1}\) \\
+        Text length & 1032 & 6626 & 2342
+             & \(3.34{\times}10^{-4}\) & \(5.96{\times}10^{-3}\) & \(5.96{\times}10^{-3}\)
+             & \(-5.58{\times}10^{-2}\) & \(8.88{\times}10^{-3}\) & \(3.30{\times}10^{-2}\) \\
+        \bottomrule
+    \end{tabular}}
+    \caption{Planner diagnostics for \(c_{\mathrm{pgap}}\) on the app review validation sets.}
+    \label{tab:validation-app-reviews-pgap-diagnostics}
+\end{table}
