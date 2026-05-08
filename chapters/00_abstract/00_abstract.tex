@@ -1,12 +1,13 @@
 \begin{abstract}
 Filtered vector search combines similarity search over high-dimensional embeddings with structured predicates over metadata. 
-The performance of such queries depends not only on predicate selectivity, 
-but also on how the structured filter relates to the local geometry of the embedding space. 
-When qualifying points are concentrated near the query, independent of it, 
-or mostly absent from its neighborhood, 
-different execution strategies can lead to different trade-offs between recall and efficiency.
+Its performance depends not only on filter selectivity, but also on how the filtered objects are distributed in the embedding space. 
+Depending on this relationship, different execution strategies can lead to different trade-offs between recall and efficiency.
 
-This thesis studies attribute-embedding correlation as a signal for query planning in filtered vector search. 
-It introduces a lightweight metric that estimates whether a structured filter is aligned with the local neighborhood of a query in the embedding space. 
-The metric is calibrated without manual labels and is used to classify query-filter pairs into correlation regimes that can guide the choice of execution strategy.
+This thesis studies the role of attribute--embedding correlation in filtered vector search and uses it as a signal for query planning.
+We introduce a lightweight metric that estimates whether a structured filter is aligned with the local neighborhood of a query in the embedding space.
+The metric is used to classify query-filter pairs into different correlation regimes, which can then guide the choice of execution strategy.
+
+To evaluate this idea, we implement a simple planner that incorporates the proposed correlation signal and compare it against standard execution strategies.
+The results show that the metric can capture meaningful structure in both synthetic and real-world settings, but also that the effectiveness of the planner depends strongly on the routing policy built on top of it.
+Finally, we discuss the limitations of the current approach and outline possible directions for future work.
 \end{abstract}

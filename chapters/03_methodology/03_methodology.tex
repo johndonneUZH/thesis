@@ -7,75 +7,120 @@ The goal is therefore not to present results, but to make the experimental setup
 
 We will evaluate our method on both synthetic and real-world data, allowing us to analyze its behavior under controlled conditions as well as in realistic settings.
 
-\subsection{Test set: \textsc{SIFT} with controlled attributes}\label{subsec:sift1m}
+\subsection{Test set: \textsc{SIFT} with controlled attributes}
+\label{subsec:sift1m}
 
-As a benchmark for vector similarity search, we use the widely adopted \textsc{SIFT1M} dataset, introduced in~\cite{jegou2010product} and used in subsequent works such as ACORN~\cite{acorn}.
+As the main controlled test set, we use the widely adopted \textsc{SIFT1M} dataset, introduced in~\cite{jegou2010product} and also used in later filtered vector search work such as ACORN~\cite{acorn}.
 
-\textsc{SIFT1M} consists of vectors in $\mathbb{R}^{128}$ and is provided in two splits. The \emph{train} split contains $10^6$ vectors used for indexing, while the \emph{test} split contains $10^4$ query vectors, each accompanied by ground-truth nearest neighbors in the database under Euclidean distance.
-This standardized setup enables consistent evaluation of approximate nearest neighbor (ANN) search methods.
+\textsc{SIFT1M} contains \(10^6\) base vectors and \(10^4\) query vectors in \(\mathbb{R}^{128}\).
+The dataset also provides ground-truth nearest neighbors under Euclidean distance, which makes it a standard benchmark for approximate nearest neighbor search.
 
-Since \textsc{SIFT1M} does not include structured attributes, we augment it with synthetic attributes following the procedure described in Chapter~\ref{chap:dataset-construction}.
+Since \textsc{SIFT1M} does not include structured attributes, we augment the base vectors with synthetic attributes following the controlled construction described in Chapter~\ref{chap:dataset-construction}.
 
-\subsection{Validation set: \textsc{SIFT} \& \textsc{GIST} with predefined attributes.}\label{subsec:sift-and-gist}
-We validate using the SIFT and GIST workloads introduced in the SIEVE benchmark repository.\footnote{\url{https://github.com/BillyZhaohengLi/SIEVE-vldb25/tree/main/biganntest}}. 
-We already covered SIFT above, while GIST contains \(10^6\) base vectors in \(\mathbb{R}^{960}\) and \(10^3\) query
-vectors. Both datasets use Euclidean distance.
+\subsection{Validation set: \textsc{SIFT} \& \textsc{GIST} with predefined attributes}
+\label{subsec:sift-and-gist}
 
-The authors of SIEVE augment these vector datasets with synthetic numeric
-attributes. For each dataset, two synthetic numeric attribute columns are sampled
-independently from a standard normal distribution, \(\mathcal{N}(0,1)\), using a
-fixed random seed, and each column is then sorted. Thus each base vector receives
-two numeric attribute values.
+We also validate using the \textsc{SIFT} and \textsc{GIST} workloads introduced in the SIEVE benchmark repository.\footnote{\url{https://github.com/BillyZhaohengLi/SIEVE-vldb25/tree/main/biganntest}}
+Table~\ref{tab:sieve-dataset-summary} summarizes the dataset-level statistics.
 
-The query endpoints are not generated independently for every query. Instead,
-SIEVE first generates a collection of range-predicate templates. Each template
-corresponds to a fixed set of endpoint values, and therefore to a fixed pair of
-range predicates. Individual queries are then assigned one of these templates.
-The assignment follows a Zipf-like distribution: a few templates are selected
-many times and therefore appear in many queries, while most templates are
-selected only a small number of times. This makes the workload skewed, with some
-frequently repeated filter ranges and many rare filter ranges.
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lrrl}
+        \toprule
+        Dataset & Base vectors & Query vectors & Dimension \\
+        \midrule
+        \textsc{SIFT} & \(10^6\) & \(10^4\) & \(128\) \\
+        \textsc{GIST} & \(10^6\) & \(10^3\) & \(960\) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Summary of the \textsc{SIFT} and \textsc{GIST} validation datasets. Both datasets use Euclidean distance.}
+    \label{tab:sieve-dataset-summary}
+\end{table}
 
-For SIFT, the query endpoints are sampled from \(\mathcal{N}(0,1)\), the same
-standard deviation used for the base attributes. For GIST, the query endpoints
-are sampled from a narrower normal distribution, i.e. with a smaller standard deviation.
-As a result, GIST endpoints are more concentrated near zero and usually define
-narrower range predicates.
+The SIEVE benchmark augments these vector datasets with synthetic numeric attributes.
+For each dataset, two numeric attribute columns are sampled independently from a standard normal distribution, \(\mathcal{N}(0,1)\), using a fixed random seed, and each column is then sorted.
+Thus, each base vector receives two numeric attribute values.
 
-We build our validation dataset based on this setup. Since this thesis considers
-only one filter predicate, we project the SIEVE multi-attribute predicate to a
-scalar range workload by using only the first numeric attribute column. For a
-query with first-column range endpoints \((a,b)\), the predicate is
+The query ranges are not sampled independently for each query.
+Instead, SIEVE first creates a fixed set of range predicates.
+Each range predicate consists of fixed lower and upper endpoint values.
+Queries are then assigned to these pre-generated ranges.
+In our scalar first-attribute setup, this gives \(200\) unique range predicates over \(10{,}000\) queries; Appendix~\ref{sec:sieve-ranges} reports the ten most frequent and ten least frequent ranges.
+
+The ranges are not used equally often.
+A few ranges are assigned to many queries, while many others are assigned to only a small fraction of queries.
+This type of uneven frequency pattern is commonly called Zipf-like: the most frequent items appear much more often than the less frequent ones.
+For example, the most common range is used in \(10\%\) of all queries, whereas the least common ranges are used in only \(0.1\%\).
+This means that the workload contains a few frequently repeated filters and many rarely used filters.
+
+For \textsc{SIFT}, the query endpoints are sampled from \(\mathcal{N}(0,1)\), matching the base-attribute scale.
+For \textsc{GIST}, the query endpoints are sampled from a narrower normal distribution, so endpoints are more concentrated near zero and usually define narrower range predicates.
+
+Since this thesis considers only one filter predicate at a time, we project the SIEVE multi-attribute predicate to a scalar range workload by using only the first numeric attribute column.
+For a query with first-column range endpoints \((a,b)\), the predicate is
 \[
     a_{\min} \le x_{\mathrm{attr}} \le a_{\max},
     \qquad
     a_{\min}=\min(a,b),\quad a_{\max}=\max(a,b).
 \]
 
-The resulting selectivity distributions are quite different for SIFT and GIST.
-For SIFT, the first-column predicates are broad: selectivity ranges from
-\(0.001438\) to \(0.950836\), with median \(0.344014\) and mean \(0.376829\).
-For GIST, the predicates are much narrower: selectivity ranges from
-\(0.000186\) to \(0.195697\), with median \(0.056291\) and mean \(0.062607\).
-Thus SIFT stresses the planner over a wide selectivity range, including many
-medium and high-selectivity queries, while GIST concentrates the evaluation near
-the low-selectivity regime where pre-filtering and graph-based filtered search
-often behave very differently.
+The resulting selectivity distributions are shown in Table~\ref{tab:sieve-selectivity-summary}.
+The two workloads differ substantially: \textsc{SIFT} covers a broad range of selectivities, including many medium- and high-selectivity queries, while \textsc{GIST} is concentrated closer to the low-selectivity regime.
 
-\subsection{Validation set: F-Droid App Reviews.}\label{subsec:fdroid}
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lrrrr}
+        \toprule
+        Dataset & Min. selectivity & Median selectivity & Mean selectivity & Max. selectivity \\
+        \midrule
+        \textsc{SIFT} & \(0.001438\) & \(0.344014\) & \(0.376829\) & \(0.950836\) \\
+        \textsc{GIST} & \(0.000186\) & \(0.056291\) & \(0.062607\) & \(0.195697\) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Selectivity statistics for the scalar first-attribute range predicates derived from the SIEVE workloads.}
+    \label{tab:sieve-selectivity-summary}
+\end{table}
+
+\subsection{Validation set: F-Droid App Reviews}
+\label{subsec:fdroid}
+
 We also evaluate on a real-world dataset derived from
 \texttt{app\_reviews} on Hugging Face.\footnote{\url{https://huggingface.co/datasets/sealuzh/app_reviews}}
 The dataset contains Android application reviews from F-Droid, an open-source
 application repository.
 
 The dataset contains \(277{,}936\) base vectors and \(10{,}000\) query vectors
-in \(\mathbb{R}^{384}\), and we use Euclidean distance. Each vector is
-associated with three integer attributes:
+in \(\mathbb{R}^{384}\), and we use Euclidean distance. Each vector is associated
+with three integer attributes:
 \[
     \texttt{text\_length},\quad \texttt{unixtime},\quad \texttt{star}.
 \]
-We evaluate two separate attribute filters: one based on review length and one
-based on star rating.
+In the experiments, we evaluate two separate attribute filters: one based on
+review length and one based on star rating. Table~\ref{tab:app-reviews-summary}
+summarizes the dataset statistics used by these workloads.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lrr}
+        \toprule
+        Statistic & Base set & Query set \\
+        \midrule
+        Number of vectors & \(277{,}936\) & \(10{,}000\) \\
+        Dimension & \(384\) & \(384\) \\
+        Distance & Euclidean & Euclidean \\
+        \midrule
+        Minimum text length & \(1\) & -- \\
+        Maximum text length & \(2335\) & -- \\
+        Median text length & \(26\) & \(25\) \\
+        Mean text length & \(63.29\) & \(63.05\) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Summary statistics for the F-Droid App Reviews validation set.}
+    \label{tab:app-reviews-summary}
+\end{table}
 
 The first workload uses the length of the review text as a numeric attribute.
 For a query review of length \(\ell_q\), the filter is
@@ -83,46 +128,81 @@ For a query review of length \(\ell_q\), the filter is
     \ell_q - 30 \le \ell \le \ell_q + 30 .
 \]
 This predicate selects reviews whose lengths are close to the query review
-length. The base review lengths range from \(1\) to \(2335\), with median \(26\)
-and mean \(63.29\); the query review lengths have a similar distribution, with
-median \(25\) and mean \(63.05\). Because many reviews are short, the
-\(\pm 30\) window is often broad relative to the empirical length distribution.
-The resulting per-query selectivity ranges from \(2.52\times 10^{-5}\) to
-\(0.703684\), with median \(0.575212\) and mean \(0.440713\). This workload
-therefore tests a real numeric attribute with a highly skewed distribution:
-some long-review queries are extremely selective, while many short-review
-queries match a large fraction of the database.
+length. Because many reviews are short, the \(\pm 30\) window is often broad
+relative to the empirical length distribution. As shown in
+Table~\ref{tab:app-reviews-length-selectivity}, this creates a skewed
+selectivity profile: some long-review queries are extremely selective, while
+many short-review queries match a large fraction of the database.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lr}
+        \toprule
+        Selectivity statistic & Value \\
+        \midrule
+        Minimum & \(2.52 \times 10^{-5}\) \\
+        Median & \(0.575212\) \\
+        Mean & \(0.440713\) \\
+        Maximum & \(0.703684\) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Per-query selectivity statistics for the text-length workload.}
+    \label{tab:app-reviews-length-selectivity}
+\end{table}
 
 The second workload uses the discrete star rating. Rather than filtering by
-exact equality, we use star-dependent rating ranges:
-\[
-\begin{array}{c|c}
-\text{query star} & \text{accepted base stars} \\
-\hline
-1 & \{1,2\} \\
-2 & \{1,2\} \\
-3 & \{3,4\} \\
-4 & \{3,4,5\} \\
-5 & \{4,5\}.
-\end{array}
-\]
-This construction groups ratings into low-, middle-, and high-rating bands. The
-base set is strongly skewed toward positive reviews: it contains \(38{,}571\)
-one-star, \(12{,}819\) two-star, \(22{,}340\) three-star, \(35{,}932\)
-four-star, and \(168{,}274\) five-star reviews. Consequently, the star filters
-have discrete, moderate-to-high selectivities. The \(\{1,2\}\) range selects
-\(18.49\%\) of the base set, \(\{3,4\}\) selects \(20.97\%\),
-\(\{3,4,5\}\) selects \(81.51\%\), and \(\{4,5\}\) selects \(73.47\%\).
-Across the query workload, the median star-filter selectivity is \(0.734723\)
-and the mean is \(0.599294\).
+exact equality, we use star-dependent rating ranges that group reviews into
+low-, middle-, and high-rating bands, as shown in
+Table~\ref{tab:app-reviews-star-ranges}.
 
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{crr}
+        \toprule
+        Query star & Accepted base stars & Selectivity \\
+        \midrule
+        \(1\) & \(\{1,2\}\) & \(0.1849\) \\
+        \(2\) & \(\{1,2\}\) & \(0.1849\) \\
+        \(3\) & \(\{3,4\}\) & \(0.2097\) \\
+        \(4\) & \(\{3,4,5\}\) & \(0.8151\) \\
+        \(5\) & \(\{4,5\}\) & \(0.7347\) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Star-rating filters used in the F-Droid App Reviews workload.}
+    \label{tab:app-reviews-star-ranges}
+\end{table}
+
+The base set is strongly skewed toward positive reviews, with most vectors
+corresponding to five-star ratings. Table~\ref{tab:app-reviews-star-distribution}
+shows the base-set rating distribution. Across the query workload, the median
+star-filter selectivity is \(0.734723\), and the mean is \(0.599294\).
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{crr}
+        \toprule
+        Star rating & Count & Fraction \\
+        \midrule
+        \(1\) & \(38{,}571\) & \(0.1388\) \\
+        \(2\) & \(12{,}819\) & \(0.0461\) \\
+        \(3\) & \(22{,}340\) & \(0.0804\) \\
+        \(4\) & \(35{,}932\) & \(0.1293\) \\
+        \(5\) & \(168{,}274\) & \(0.6054\) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Base-set distribution of star ratings in the F-Droid App Reviews dataset.}
+    \label{tab:app-reviews-star-distribution}
+\end{table}
 
 \section{Implementation Details}\label{subsec:implementation-details}
 For the execution strategies, expanding on what we dicussed in \ref{sec:execution-strategies} we will use the following implementations:
 \paragraph{Pre-filter.}
 The pre-filter baseline applies the metadata predicate before any vector ranking takes place. 
 Given a query vector $q \in \mathbb{R}^d$ and a predicate interval $[l,h]$, the algorithm first identifies the subset of database vectors whose scalar metadata values satisfy the predicate. 
-Formally, if the database is $\{(x_i, a_i)\}_{i=1}^N$, where $x_i \in \mathbb{R}^d$ is the vector embedding and $a_i \in \mathbb{Z}$ is the associated metadata value, then the admissible set is
+Formally, if the database is $\{(x_i, a_i)\}_{i=1}^N$, where $x_i \in \mathbb{R}^d$ is the vector embedding and $a_i \in \mathbb{R}$ is the associated metadata value, then the admissible set is
 \[
 X_{[l,h]} = \{x_i \mid l \le a_i \le h\}.
 \]
@@ -142,86 +222,69 @@ by explicitly iterating over all $d$ dimensions.
 The resulting list of $(d(q,x_i), i)$ pairs is then partially sorted to retain only the $k$ smallest distances. 
 If the admissible subset contains at most $k$ elements, the list is fully sorted; otherwise, a partial sort is used to avoid unnecessary ordering work beyond the top-$k$ frontier.
 
-It is important to note that, in the current implementation, pre-filtering does \emph{not} perform ANN search on a dedicated filtered index. 
-Although the preprocessing stage constructs index artifacts, the actual query-time pre-filter path computes exact distances to every admissible vector and then selects the exact top-$k$ within that subset. 
-Thus, algorithmically, this baseline is best understood as \emph{filter first, then exact $k$-NN on the filtered subset}.
-
-Let $m = |X_{[l,h]}|$ denote the number of admissible vectors for a given query. 
-The dominant cost per query is then the exact distance computation over the filtered subset, which requires $O(md)$ arithmetic operations, followed by top-$k$ selection. 
-Consequently, pre-filtering is highly effective for selective predicates, where $m \ll N$, since the candidate set is reduced before any geometric search is performed. 
-However, as the predicate becomes less selective and $m$ approaches $N$, the method degenerates toward a full scan and becomes increasingly expensive.
+It is important to note that, in the current implementation, pre-filtering does \emph{not} perform ANN search on a dedicated filtered index, 
+but computes exact distances to every vector in the filtered subset and then selects the exact top-$k$ within that subset. 
+Algorithmically, this baseline is best understood as \emph{filter first, then exact $k$-NN on the filtered subset}.
 
 \paragraph{Post-filter.}
-The post-filter baseline reverses the order of operations: it first performs approximate nearest neighbor retrieval on the full vector dataset, and only afterwards applies the metadata predicate to the returned candidates. 
-The implementation uses an HNSW index over all database vectors, entirely ignoring metadata during graph traversal. 
-Thus, the first phase returns an approximate ranking with respect to vector similarity alone.
+The post-filter baseline first performs ANN search on the full vector dataset and applies the metadata predicate only afterwards.
+The implementation uses a global HNSW index over all database vectors, so metadata is ignored during graph traversal and the returned ranking is based only on vector distance.
 
-Formally, given query vector $q$ and predicate interval $[l,h]$, the method first queries the global HNSW index to retrieve a candidate list
+Given a query vector \(q\) and predicate interval \([l,h]\), the method retrieves a candidate list
 \[
-C(q) = \{x_{i_1}, x_{i_2}, \dots, x_{i_f}\},
+C_f(q) = \{x_{i_1}, x_{i_2}, \dots, x_{i_f}\},
 \]
-where $f$ is the number of fetched candidates and the sequence is ordered approximately by increasing vector distance to $q$. 
-The metadata predicate is then applied to this candidate list, keeping only those items whose attributes satisfy
+ordered approximately by increasing distance to \(q\).
+It then scans this list in order and keeps candidates whose attribute satisfies
 \[
 l \le a_{i_j} \le h.
 \]
-The final answer consists of the first $k$ admissible candidates encountered in this approximate ranking.
+The final answer consists of the first \(k\) admissible candidates found in this filtered ranking.
 
-A central challenge of post-filtering is that, when the predicate is selective, only a small fraction of the globally nearest candidates are expected to satisfy the metadata constraint. 
-To compensate, the implementation uses an adaptive over-fetching strategy. 
-If the estimated selectivity of the predicate is $s = m/N$, where $m$ is the number of admissible vectors, then the initial fetch size is chosen approximately proportional to $k/s$. 
-Intuitively, if only a fraction $s$ of candidates are expected to survive filtering, then one must retrieve on the order of $k/s$ candidates to expect about $k$ valid results. 
-A multiplicative slack factor is added in practice to make this more robust.
-
-More concretely, the implementation first estimates the number of admissible points by applying binary search to the sorted metadata array, just as in the pre-filter case. 
-This does not identify the actual nearest admissible vectors, but it provides an estimate of predicate selectivity. 
-The initial over-fetch size is then computed as
+Since only a fraction \(s=m/N\) of the dataset satisfies the predicate, where \(m\) is the number of admissible vectors, the implementation over-fetches from HNSW.
+The value of \(m\) is estimated by binary search over the sorted metadata array, as in the pre-filter case.
+The initial fetch size is then set to
 \[
 f \approx \left\lceil \frac{k}{s} \cdot \alpha \right\rceil,
 \]
-where $\alpha > 1$ is a heuristic multiplicative factor. 
-The HNSW search parameter $efSearch$ is increased accordingly, ensuring that the graph exploration depth is at least as large as the requested candidate set size.
+where \(\alpha > 1\) is an over-fetching factor.
+In the implementation, the default value is \(\alpha=2\).
+Since \(k/s\) is only an average-case estimate, the extra factor reduces the chance of retrieving fewer than \(k\) admissible candidates.
+The implementation also sets \texttt{efSearch} to at least \(f\), so that HNSW uses a large enough search budget for the requested candidate list.
 
-After HNSW returns its candidate list, the implementation scans this list in order and retains the first $k$ items whose metadata satisfies the predicate. 
-If too few valid items are found, the algorithm increases the fetch size, by doubling it, and reruns the HNSW search. 
-This retry process continues until one of the following conditions is met: either at least $k$ valid results have been found and the retrieved prefix contains a sufficiently large number of admissible candidates, or a maximum retry / fetch budget has been reached.
-
-This stopping rule is important. 
-Finding exactly $k$ valid results in the filtered prefix does not by itself imply that the returned set is a good approximation of the true filtered top-$k$. 
-If only a very small number of admissible points were encountered in the fetched prefix, then the search may have truncated the filtered ranking too aggressively. 
-The implementation therefore also checks how many admissible points were observed overall in the fetched set, using this as a proxy for whether the search depth was sufficient.
-
-The computational behavior of post-filtering differs fundamentally from that of pre-filtering. 
-Its cost is not determined directly by the true admissible set size $m$, but rather by the amount of over-fetching required to recover enough valid points from a global ANN ranking. 
-When the predicate is broad, this method is efficient because many of the globally nearest neighbors are also admissible, so only modest over-fetching is needed. 
-When the predicate is highly selective, however, the majority of retrieved candidates are discarded, causing the fetch size and HNSW search depth to grow substantially. 
-As a result, post-filtering typically performs well at high selectivities but degrades sharply as selectivity decreases.
+If fewer than \(k\) admissible candidates are found after filtering, the fetch size is doubled and the HNSW search is repeated.
+This retry process continues until either enough valid results are found, or a maximum retry or fetch budget is reached.
+Thus, post-filtering is simple to implement, but its cost grows when the predicate is selective: as \(s\) decreases, the expected number of candidates that must be retrieved grows roughly as \(k/s\).
 
 \paragraph{ACORN.}
-ACORN is a hybrid vector search method designed specifically to mitigate the weaknesses of conventional post-filtering under selective predicates. 
-Instead of treating metadata filtering as an afterthought applied to a standard ANN index, ACORN modifies the underlying graph structure so that filtered search remains effective even when the admissible subset is sparse.
+ACORN is a hybrid vector search method designed to reduce the weaknesses of conventional post-filtering under structured predicates.
+The implementation used in this work relies on the open-source ACORN library.\footnote{\url{https://github.com/guestrin-lab/ACORN}}
 
-The implementation used in this work relies on the open-source ACORN library.\footnote{\url{https://github.com/guestrin-lab/ACORN}} 
-Conceptually, ACORN can be understood as an extension of HNSW in which graph construction is made more robust to filtering. 
-In a standard HNSW graph, each node stores a limited number of neighbors chosen to support efficient greedy routing in the full, unfiltered space. 
-Under metadata predicates, however, the induced subgraph on admissible nodes may become poorly connected or even fragmented, making it difficult for standard HNSW traversal to reach relevant valid points.
+ACORN builds on HNSW, but modifies the graph so that it remains useful even when a query predicate removes many nodes.
+In a standard HNSW index, each node stores a small set of neighbors chosen for efficient navigation in the full vector space.
+This works well for ordinary ANN search, but it can break down under filtering.
+If only a subset of nodes satisfies the predicate, the subgraph induced by those admissible nodes may be sparse or poorly connected.
+As a result, a normal HNSW traversal may spend effort near invalid nodes or fail to reach enough valid nearest neighbors.
 
-ACORN addresses this by constructing a denser and more predicate-robust graph. 
-During index construction, each node considers a larger candidate neighborhood than would be used in standard HNSW. 
-If $M$ is the target graph degree, then ACORN-$\gamma$ expands the candidate pool by a factor $\gamma$, exploring up to approximately $M\gamma$ neighbors before pruning. 
-This produces a graph with higher redundancy and improved connectivity under filtering. 
-A compression or pruning parameter $M_\beta$ is then used to control memory growth by retaining only the most useful edges.
+The main idea of ACORN is therefore to make the graph more robust before queries arrive.
+During construction, ACORN stores a larger neighborhood for each node than standard HNSW.
+If \(M\) is the usual target degree, ACORN-\(\gamma\) considers roughly \(M\gamma\) candidate neighbors.
+This increases the chance that, for many possible predicates, each valid node still has enough valid neighbors after filtering.
+To limit memory growth, ACORN then applies a pruning or compression step controlled by parameters such as \(M_\beta\).
 
-At query time, ACORN performs filtered ANN search directly on this augmented graph. 
-The predicate is incorporated into traversal rather than applied only after retrieval. 
-Intuitively, once search has reached predicate-satisfying regions of the graph, traversal can continue primarily through nodes that also satisfy the filter, thereby approximating search on the induced admissible subgraph without explicitly materializing separate per-predicate indexes.
+At runtime, ACORN receives a query vector \(q\) and a predicate \(\phi\).
+The search still starts from the global graph entry point, as in HNSW.
+However, when ACORN expands a node, it does not simply use the ordinary neighbor list.
+Instead, it filters the neighbor list according to \(\phi\) and continues the greedy search mainly through neighbors that satisfy the predicate.
+In other words, the predicate is used during graph traversal, not only after retrieving candidates.
+The goal is to approximate a search over the subgraph of all admissible nodes,
+\[
+X_\phi = \{x_i : \phi(x_i) = \mathrm{true}\},
+\]
+without explicitly building a separate HNSW index for \(X_\phi\).
 
-As in HNSW, ACORN maintains a dynamic candidate set whose size is governed by an exploration parameter $ef$. 
-Larger values of $ef$ increase search breadth and usually improve recall at the cost of higher latency. 
-However, because the graph has been constructed to be more robust under filtering, ACORN can often recover high-quality predicate-satisfying neighbors with much less over-fetching than naive post-filtering. 
-In particular, it reduces the failure mode in which the nearest admissible points are not well connected to the entry path of the unfiltered ANN graph.
-
-From an algorithmic perspective, ACORN occupies a middle ground between pre-filtering and post-filtering. 
-Unlike pre-filtering, it does not explicitly enumerate the full admissible subset and therefore avoids the linear-in-$m$ scan cost. 
-Unlike post-filtering, it does not rely solely on a global unfiltered ranking and thus is less sensitive to the scarcity of admissible points in the early retrieved prefix. 
-Its main trade-off is a more expensive and memory-intensive index construction phase, together with a more specialized graph structure.
+This distinction is important.
+ACORN does not first enumerate all admissible vectors, as pre-filtering does.
+It also does not first retrieve an unfiltered top-\(k'\) list and then discard invalid results, as post-filtering does.
+Instead, it tries to navigate directly through the predicate-satisfying part of a pre-built augmented graph.
+This makes ACORN an inline or predicate-aware graph traversal method.

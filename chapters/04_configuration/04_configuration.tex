@@ -156,14 +156,14 @@ If all values are identical, we set $\hat{a}_i = 0.5$ for all $i$.
 
 Finally, we quantize:
 \[
-a_i = \mathrm{round}(200 \cdot \hat{a}_i), \quad a_i \in \{0,\dots,200\}.
+a_i = \mathrm{round}(1000 \cdot \hat{a}_i), \quad a_i \in \{0,\dots,1000\}.
 \]
 
 \section{Uncorrelated Attribute Generation}
 
 For the uncorrelated baseline, each vector is assigned an attribute value independently and uniformly at random from $\mathcal{A}$:
 \[
-a_i^{(\mathrm{rand})} \sim \mathrm{Unif}(\{0,\dots,200\}).
+a_i^{(\mathrm{rand})} \sim \mathrm{Unif}(\{0,\dots,1000\}).
 \]
 
 This construction is independent of the vector space and removes any relationship between vector similarity and attribute similarity.
@@ -178,7 +178,7 @@ Let
 \]
 be the set of query vectors, and let
 \[
-\{a_i\}_{i=1}^{N}, \quad a_i \in \{0, \dots, 200\},
+\{a_i\}_{i=1}^{N}, \quad a_i \in \{0, \dots, 1000\},
 \]
 denote the attribute values associated with the dataset.
 

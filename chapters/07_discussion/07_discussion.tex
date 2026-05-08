@@ -1,3 +1,189 @@
-\chapter{Discussion \& Conclusion}\label{chap:experimental-setup}
+\chapter{Discussion \& Conclusion}\label{chap:discussion-conclusion}
 \section{Considerations}
+
+The experiments show that the proposed correlation metrics do capture structure in the data.
+This is most visible in the controlled test workload, where the planner can separate favorable and unfavorable query--filter pairs and use this signal to improve the speed--accuracy trade-off.
+In particular, the adaptive planner reaches essentially the same recall as ACORN while obtaining higher throughput.
+
+At the same time, the test workload should be interpreted carefully, since the metadata attributes used were constructed to have a clear geometric relationship to the embedding space.
+This makes it a useful environment for validating whether the metrics can detect the intended signal, but it also makes the setting close to ideal.
+If a metric fails or becomes unstable in this setting, this is therefore a stronger warning sign than it would be on a noisy external dataset.
+
+\paragraph{Metric conservatism at low selectivity.}
+
+This concern is especially relevant when interpreting the \(c_{\mathrm{tanh}}\) and \(c_{\mathrm{pgap}}\) metrics.
+Both metrics detect structure in the controlled experiments, but they also begin to classify some queries as random even in this favorable setting.
+This corresponds to the collapse toward zero discussed in Chapter~\ref{chap:experiments}.
+
+In practice, this conservatism is acceptable.
+At very low selectivities, PRE-FILTER is usually the best strategy regardless of the correlation signal, because the filtered candidate set is already small.
+In this range, selectivity alone is often sufficient to choose a good plan.
+
+Correlation-aware decisions become more important at higher selectivities, where PRE-FILTER becomes more expensive and the choice between POST-FILTER and ACORN is less obvious.
+These are also the cases where local and global predicate distributions are easier to distinguish, since \(p_c\) and \(p_g\) are less likely to vanish because of sparse counts.
+Thus, even if \(c_{\mathrm{tanh}}\) and \(c_{\mathrm{pgap}}\) are conservative for very narrow predicates, they remain useful in the selectivity range where correlation-aware planning matters most.
+
+\paragraph{SIFT and GIST as random-attribute baseline.}
+
+The SIFT and GIST validation results need particular attention.
+As described in Section~\ref{subsec:sift-and-gist}, the SIEVE attributes used for these datasets are themselves synthetic: the numeric attribute columns are sampled independently from a standard normal distribution and then assigned to the base vectors.
+They are therefore not real semantic metadata attributes, and they are not constructed to have a meaningful relationship to the embedding geometry.
+
+For both datasets, \(c_{\mathrm{tanh}}\) and \(c_{\mathrm{pgap}}\) classify all queries as random.
+Given the way the attributes are generated, this is not necessarily a failure; for independent attributes, a correlation metric should mostly report no structure.
+\(c_{\mathrm{heur}}\) is more active on SIFT, where it classifies \(1{,}498\) out of \(10{,}000\) queries as non-random: \(932\) negative and \(566\) positive.
+It also classifies all GIST queries as random.
+
+To understand whether the SIFT cases flagged by \(c_{\mathrm{heur}}\) correspond to actual metadata--embedding structure, 
+we compared the \(1{,}498\) non-random heuristic labels against the true correlation metric already defined in Section~\ref{sec:correlation},
+\[
+    c_{\mathrm{true}}
+    =
+    \frac{\mathbb{E}[g_k(q,R_p)] - g_k(q,X_p)}
+         {\mathbb{E}[g_k(q,R_p)]},
+\]
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{lrrr}
+        \toprule
+        \(c_{\mathrm{heur}}\) label & True negative & True random & True positive \\
+        \midrule
+        Negative & 442 & 431 & 59 \\
+        Positive & 30 & 360 & 176 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Distance-based true-correlation labels for SIFT queries classified as non-random by \(c_{\mathrm{heur}}\).}
+    \label{tab:sift-heuristic-true-correlation}
+\end{table}
+
+The result is mixed.
+Among the SIFT queries flagged as non-random by \(c_{\mathrm{heur}}\), only \(41.3\%\) agree with the distance-based sign, \(52.8\%\) are actually random.
+As a fraction of the full SIFT workload, this means that from the \(14.9\%\) non-random queries flagged by \(c_{\mathrm{heur}}\) only \(6.18\%\) are confirmed by \(c_{\mathrm{true}}\).
+Thus the heuristic signal on SIFT is real enough to produce non-random labels, but it is noisy and should not be interpreted as robust evidence of metadata--embedding correlation.
+
+\paragraph{Type I and Type II errors.}
+
+This also raises a more general question about the fallibility of the metric.
+Any lightweight runtime proxy can make two kinds of mistakes.
+A Type I error occurs when the metric classifies a query as positively or negatively correlated even though the query behaves like a random one.
+A Type II error occurs when the metric classifies a query as random even though a true positive or negative correlation exists.
+For query planning, Type I errors are more harmful.
+They can route a query to a specialized execution strategy based on a correlation signal that is not actually present, producing unnecessary recall loss or latency overhead.
+Type II errors are still undesirable, because the planner may miss an opportunity to exploit structure, but the fallback behavior is usually closer to a safe baseline.
+
+In this thesis, we therefore prefer a conservative metric that avoids false correlation claims over a more active metric that detects more cases but produces many unreliable non-random labels.
+
+\paragraph{App-review validation.}
+
+To further analyse the behaviour observed in Section~\ref{subsec:app-reviews}, we compare each proposed metric against \(c_{\mathrm{true}}\).
+For both \texttt{text\_length} and \texttt{star\_rating}, we audit three groups of queries: those with the strongest positive scores, those with the strongest negative scores, and those closest to zero.
+From each group, we sample 25 queries and compute \(c_{\mathrm{true}}\) for each of them.
+The corresponding label is obtained using the calibrated threshold \(\tau(s)\), following the procedure described in Section~\ref{sec:tau}.
+
+Table~\ref{tab:app-review-validation} reports the agreement between each proposed metric and \(c_{\mathrm{true}}\).
+Spearman correlation measures whether the two scores induce a similar ranking of the audited queries, while Pearson correlation measures the strength of their linear relationship.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{llrr}
+        \toprule
+        Attribute & Metric & Spearman & Pearson \\
+        \midrule
+        Star rating & Heuristic & 0.8998 & 0.7824 \\
+        Star rating & Pgap      & 0.8794 & 0.7680 \\
+        Star rating & Tanh      & 0.8521 & 0.7866 \\
+        \midrule
+        Text length & Heuristic & 0.5682 & 0.4016 \\
+        Text length & Pgap      & 0.7270 & 0.4080 \\
+        Text length & Tanh      & 0.6760 & 0.5299 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Agreement between metric scores and \(c_{\mathrm{true}}\) on app-review queries.}
+    \label{tab:app-review-validation}
+\end{table}
+
+All three metrics are positively correlated with \(c_{\mathrm{true}}\) for both attributes.
+This means that the cheaper metric scores generally follow the more expensive \(c_{\mathrm{true}}\) computation.
+The agreement is strongest for \texttt{star\_rating}, where all metrics show high Spearman and Pearson correlation.
+
+For \texttt{text\_length}, the signal is weaker, and the differences between the metrics become clearer.
+The heuristic and pgap metrics still preserve the ranking reasonably well, but their Pearson correlation drops to around \(0.40\), meaning that their scores do not follow the scale of \(c_{\mathrm{true}}\) as closely.
+Tanh is more stable: it keeps a higher Pearson correlation for \texttt{text\_length}, while showing similar behaviour to the other metrics on \texttt{star\_rating}.
+This makes it the most robust metric in this validation.
+
+\paragraph{Metric signal versus planner quality.}
+
+Furthermore, the app-review results also show that detecting structure is not sufficient by itself.
+Even when the metrics identify a correlation signal, the adaptive planner does not consistently outperform the fixed baselines.
+POST-FILTER remains the fastest strategy, PRE-FILTER remains the highest-recall strategy, and ACORN usually provides the strongest fixed speed--recall trade-off.
+The planner is sometimes faster than ACORN, but it often loses too much recall to dominate it.
+This is especially visible for \texttt{star\_rating}, where many queries are routed to POST-FILTER and the planner remains well below ACORN in recall.
+For \texttt{text\_length}, the routing is somewhat more balanced and the planner recovers more recall, but the improvement is still not enough to clearly beat ACORN.
+
+This raises two fundamental questions.
+
+The first question is whether the metric can detect structure in the data.
+The experiments suggest that it can, especially in the controlled workload and in the app-review validation set.
+
+The second question is whether the current routing policy uses that structure optimally.
+The validation results suggest that it does not.
+The planner uses a simple rule-based policy derived from the synthetic experiments, and that policy is too conservative in some real-world cases.
+
+\paragraph{Recommended metric.}
+
+Based on these observations, we recommend \(c_{\mathrm{tanh}}\) as the default correlation metric.
+It retains the same conceptual structure as the heuristic formulation, but downweights weak lift values smoothly.
+This avoids turning very small differences between \(p_c\) and \(p_g\) into confident positive or negative scores.
+This makes it more reliable than \(c_{\mathrm{heur}}\), whose SIFT labels agree with the distance-based true signal for only \(41.3\%\) of flagged cases.
+
+We also prefer \(c_{\mathrm{tanh}}\) over \(c_{\mathrm{pgap}}\).
+Both metrics are conservative on the independent-attribute SIFT and GIST workloads, where they classify all queries as random.
+However, \(c_{\mathrm{pgap}}\) depends on the absolute probability difference \(p_c-p_g\), which can suppress rare predicates even when they are meaningfully enriched in the local neighborhood.
+In practice, the two metrics behave similarly, but \(c_{\mathrm{tanh}}\) appears more robust in the app-review validation: it remains competitive on \texttt{star\_rating} and achieves a higher Pearson correlation on \texttt{text\_length}.
+
 \section{Future work}
+
+\paragraph{Validation in database systems.}
+
+A natural next step is to evaluate the proposed metrics inside a real database system.
+The experiments in this thesis isolate the filtered vector search problem in order to make the behavior of the different strategies easier to analyze. 
+They therefore do not capture the full complexity of a production query engine, where components such as query optimization, index maintenance, buffer management and concurrent workloads can also influence search performance.
+
+In the current implementation, statistics such as cluster assignments, local attribute distributions, global distributions, and cumulative distribution functions are built explicitly for the experimental pipeline.
+Inside a database system, these statistics would instead need to become part of the system metadata and be made available to the query planner during optimization.
+
+A particularly important question is which parts of the metric can be computed offline.
+For example, the JS divergence between each cluster distribution and the global distribution could be materialized in advance, since it does not depend on the query predicate.
+Similarly, the per-cluster CDFs could be stored so that, at runtime, the planner only needs to assign the query vector to a cluster and compute the probability mass of the filter interval.
+This would make the metric much cheaper to evaluate during query planning.
+
+Future work should therefore study the engineering cost of maintaining these statistics in a real system.
+This includes measuring how long it takes to build the per-cluster histograms and CDFs, how this cost scales with the number of vectors and attributes, and how often the statistics would need to be refreshed as the database changes.
+The number of clusters is also an important design parameter: more clusters may capture local correlation more accurately, while fewer clusters may be cheaper and more stable.
+Although this introduces a time--space trade-off, the main question is whether these statistics can be maintained cheaply enough for the metric to be useful in a production query optimizer.
+
+\paragraph{Parameter tuning.}
+
+A second direction is to move beyond the discrete classification used in this thesis.
+Here, the planner reduces the estimated correlation to one of three regimes: positive, negative, or random.
+In practice, two positively correlated queries may differ substantially in how strongly the admissible predicate subset is concentrated near the query neighborhood.
+Likewise, two negatively correlated queries may require very different amounts of additional search effort.
+
+Future work should therefore treat correlation as a continuous signal rather than only as a discrete routing label.
+The goal would be to estimate how much a filter predicate changes the expected difficulty of the search, and to use this estimate to dynamically tune the internal parameters of filtered vector search methods.
+
+For example, in ACORN~\cite{acorn}, the correlation score could guide the amount of search effort.
+A locally enriched predicate may require a lower \texttt{efSearch} to reach a target recall, since many nearby candidates are likely to satisfy the filter.
+A locally depleted predicate, on the other hand, may require a higher \texttt{efSearch}, because the search must explore further before finding enough admissible candidates.
+
+This follows a similar intuition to DARTH~\cite{darth}, which uses a learned model to decide when an ANN search can terminate while still meeting a target recall.
+The proposed correlation score could be added as an input feature to such a recall prediction model.
+The model would then combine search-state features, such as distance computations and candidate-distance statistics, with a query-specific estimate of predicate--embedding correlation, 
+and could make overall dynamic recall prediction more robust.
+
+Rather than selecting a completely different execution strategy at hard thresholds, the system could continuously adjust search parameters to match the estimated workload difficulty.
+Such a formulation may also reduce the instability caused by boundary cases: queries close to a threshold would not abruptly switch plans, but would instead receive slightly different search budgets.
+More broadly, this direction could allow correlation-aware methods to complement existing state-of-the-art techniques rather than replace them, effectively improving ACORN, DARTH, or future filtered ANN systems.

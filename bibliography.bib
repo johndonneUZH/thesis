@@ -155,16 +155,6 @@
       numpages = {5}
 }
 
-@misc{li2025attributefilteringapproximatenearest,
-      title={Attribute Filtering in Approximate Nearest Neighbor Search: An In-depth Experimental Study}, 
-      author={Mocheng Li and Xiao Yan and Baotong Lu and Yue Zhang and James Cheng and Chenhao Ma},
-      year={2025},
-      eprint={2508.16263},
-      archivePrefix={arXiv},
-      primaryClass={cs.DB},
-      url={https://arxiv.org/abs/2508.16263}, 
-}
-
 @misc{acorn,
       title={ACORN: Performant and Predicate-Agnostic Search Over Vector Embeddings and Structured Data}, 
       author={Liana Patel and Peter Kraft and Carlos Guestrin and Matei Zaharia},
@@ -212,14 +202,6 @@ keywords = {filtered approximate nearest neighbor search, label navigating graph
       archivePrefix={arXiv},
       primaryClass={cs.DB},
       url={https://arxiv.org/abs/2502.05912}, 
-}
-
-@inproceedings{corrbound,
-  title={CorrBound: Cardinality Estimation Accounting for Inter- and Intra-relation Correlations},
-  author={Mayer, Christoph and Zhang, Haozhe and Abo Khamis, Mahmoud and Deeds, Kyle and Olteanu, Dan and Suciu, Dan},
-  booktitle={Proceedings of the ACM SIGMOD Conference},
-  year={2026},
-  note={to appear}
 }
 
 @inproceedings{lynch2001selectivity,
@@ -300,15 +282,6 @@ abstract = {Summary Approximate nearest neighbor search (ANNS) is widely employe
 year = {2020}
 }
 
-@misc{amazon-products,
-  author       = {Parab, Lokesh},
-  title        = {Amazon Products Dataset},
-  year         = {2023},
-  publisher    = {Kaggle},
-  howpublished = {\url{https://www.kaggle.com/datasets/lokeshparab/amazon-products-dataset}},
-  note         = {Accessed: 2026-04-19}
-}
-
 @article{jegou2010product,
   title={Product quantization for nearest neighbor search},
   author={Jegou, Herve and Douze, Matthijs and Schmid, Cordelia},
@@ -319,3 +292,53 @@ year = {2020}
   year={2010},
   publisher={IEEE}
 }
+
+@misc{sift1b,
+      title={Searching in one billion vectors: re-rank with source coding}, 
+      author={Hervé Jégou and Romain Tavenard and Matthijs Douze and Laurent Amsaleg},
+      year={2011},
+      eprint={1102.3828},
+      archivePrefix={arXiv},
+      primaryClass={cs.IR},
+      url={https://arxiv.org/abs/1102.3828}, 
+}
+
+@inproceedings{deep1b,
+  title={Efficient indexing of billion-scale datasets of deep descriptors},
+  author={Babenko, Artem and Lempitsky, Victor},
+  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
+  pages={2055--2063},
+  year={2016}
+}
+
+@article{analyticdbv,
+author = {Wei, Chuangxian and Wu, Bin and Wang, Sheng and Lou, Renjie and Zhan, Chaoqun and Li, Feifei and Cai, Yuanzhe},
+title = {AnalyticDB-V: a hybrid analytical engine towards query fusion for structured and unstructured data},
+year = {2020},
+issue_date = {August 2020},
+publisher = {VLDB Endowment},
+volume = {13},
+number = {12},
+issn = {2150-8097},
+url = {https://doi.org/10.14778/3415478.3415541},
+doi = {10.14778/3415478.3415541},
+abstract = {With the explosive growth of unstructured data (such as images, videos, and audios), unstructured data analytics is widespread in a rich vein of real-world applications. Many database systems start to incorporate unstructured data analysis to meet such demands. However, queries over unstructured and structured data are often treated as disjoint tasks in most systems, where hybrid queries (i.e., involving both data types) are not yet fully supported.In this paper, we present a hybrid analytic engine developed at Alibaba, named AnalyticDB-V (ADBV), to fulfill such emerging demands. ADBV offers an interface that enables users to express hybrid queries using SQL semantics by converting unstructured data to high dimensional vectors. ADBV adopts the lambda framework and leverages the merits of approximate nearest neighbor search (ANNS) techniques to support hybrid data analytics. Moreover, a novel ANNS algorithm is proposed to improve the accuracy on large-scale vectors representing massive unstructured data. All ANNS algorithms are implemented as physical operators in ADBV, meanwhile, accuracy-aware cost-based optimization techniques are proposed to identify effective execution plans. Experimental results on both public and in-house datasets show the superior performance achieved by ADBV and its effectiveness. ADBV has been successfully deployed on Alibaba Cloud to provide hybrid query processing services for various real-world applications.},
+journal = {Proc. VLDB Endow.},
+month = aug,
+pages = {3152–3165},
+numpages = {14}
+}
+
+
+@article{darth,
+   title={DARTH: Declarative Recall Through Early Termination for Approximate Nearest Neighbor Search},
+   volume={3},
+   ISSN={2836-6573},
+   url={http://dx.doi.org/10.1145/3749160},
+   DOI={10.1145/3749160},
+   number={4},
+   journal={Proceedings of the ACM on Management of Data},
+   publisher={Association for Computing Machinery (ACM)},
+   author={Chatzakis, Manos and Papakonstantinou, Yannis and Palpanas, Themis},
+   year={2025},
+   month=Sept, pages={1–26} }

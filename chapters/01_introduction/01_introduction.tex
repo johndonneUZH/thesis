@@ -4,14 +4,9 @@
 Consider a user searching for a shirt that is visually similar to a high-end item, but costs less than a given threshold, for example under 30.
 This query combines two requirements: a vector-similarity condition, which retrieves visually or stylistically related items, and a structured predicate, which restricts the result set by an attribute such as price.
 
-Queries of this form are common in modern retrieval systems, where unstructured similarity search is combined with structured filtering.
-The system must retrieve items that are close to the query in the embedding space, while also satisfying the user-specified filter.
-The challenge is therefore not only to find similar items, but to find similar items inside a restricted subset of the data.
-
 A first factor that affects query cost is predicate selectivity.
 If the predicate is highly selective, only a small fraction of the dataset remains admissible.
 As a result, the search may need to inspect more candidates before it finds enough points that both satisfy the predicate and are close to the query.
-Lower selectivity therefore often increases retrieval cost.
 
 \begin{figure}[htbp]
     \centering
@@ -20,44 +15,58 @@ Lower selectivity therefore often increases retrieval cost.
     \label{fig:motivation-selectivity}
 \end{figure}
 
-However, selectivity alone does not fully determine query difficulty.
-Two predicates with the same selectivity can behave very differently depending on where their valid points lie in the embedding space.
-If the filtered points are concentrated near the query, the search can recover valid nearest neighbors with little additional work.
-If they are mostly far from the query, the search must explore a larger and less relevant region of the index.
+However, selectivity alone does not determine query difficulty.
+Two predicates with the same selectivity can still lead to different search costs, 
+because the points satisfying the predicate may be concentrated in different parts of the embedding space.
+If the filter is aligned with vector locality, many valid points lie near the query and the filtered set overlaps with the neighborhood that the vector index would naturally explore.
+The search can therefore recover valid nearest neighbors with little additional work.
+If the filter is not aligned with the embedding space, the nearby neighborhood may contain mostly points that fail the predicate.
+The search must then continue farther through the index before finding enough valid results.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{figures/motivation_correlation.png}
+    \includegraphics[width=0.75\textwidth]{figures/motivation_correlation.jpeg}
     \caption{Effect of attribute--embedding correlation.}
     \label{fig:motivation-correlation}
 \end{figure}
 
-This second effect depends on the relationship between structured attributes and the embedding space.
-When the filter attribute is aligned with vector locality, filtering preserves the neighborhood around the query.
-In this case, the admissible set contains many points that the vector index would naturally explore.
-When the attribute is not aligned with the embedding space, filtering disrupts this neighborhood structure.
-The search may then encounter many nearby points that fail the predicate and must continue farther through the index.
-
 The central problem studied in this thesis is how to quantify this relationship between structured attributes and vector embeddings.
-Such a measure can help explain why filtered vector search queries with similar selectivity may have different costs, and it can support query-planning decisions between execution strategies such as pre-filtering, post-filtering, and hybrid graph-based search.
 
 \section{Research Gap}\label{sec:research-gap}
 
-Existing work, however, typically handles this interaction only indirectly and in a system-specific manner. In particular, most evaluations rely on synthetic workloads where attributes are generated independently of the vector data.
+Existing work on filtered vector search often evaluates systems using synthetic or semi-synthetic structured attributes.
+This is not a limitation by itself: synthetic workloads are useful because they make it possible to control selectivity, predicate type, and query complexity.
+The limitation is that, in many common benchmarks, these workloads do not control the relationship between attributes and vector geometry.
 
-Starting from NHQ \cite{nhq}, prior work constructs such workloads by attaching synthetic attributes to vectors, following approaches used in systems such as Milvus \cite{milvus} and Multiattribute ANNS \cite{multiattributenhq}. In these settings, attribute values are assigned by randomly sampling from predefined categories. While this enables controlled experiments, it ignores any connection between attributes and embeddings. Similarly, Filtered-DiskANN \cite{filtereddiskann} generates labels independently of the vector space, explicitly removing any correlation.
+A common starting point for this type of benchmark construction is Milvus~\cite{milvus}, which is later referenced by several filtered vector search papers.
+Milvus takes vectors from SIFT1B~\cite{sift1b} and augments each vector with a randomly generated scalar attribute.
+Filtered predicates are then created over this attribute, making it possible to vary selectivity in a controlled way.
+However, because the attribute is sampled randomly, the benchmark does not control where the satisfying vectors lie in the embedding space.
 
-As a result, current approaches do not capture how filters and vectors interact in practice, and this effect remains largely unmodeled.
+This design choice is partly caused by the lack of public datasets that naturally combine embeddings with structured attributes.
+AnalyticDB-V~\cite{analyticdbv} states this issue explicitly, noting that ``so far, there is no publicly available dataset that contains both structured data and unstructured data.''
+Accordingly, it uses public vector-only datasets such as SIFT1B~\cite{sift1b} and Deep1B~\cite{deep1b} for standard ANN experiments, but relies on the in-house AliCommodity dataset for hybrid-query experiments.
+Since this dataset is not publicly available, later work must either use alternative real-world datasets or construct semi-synthetic hybrid benvchmarks.
 
-\section{Main goals}
+Milvus~\cite{milvus}, Multiattribute ANNS~\cite{multiattributenhq}, and NHQ~\cite{nhq} follow the latter approach.
 
-Metric proposal
-“How much does the local neighborhood of a query differ from the global dataset with respect to the attribute distribution?”
+Filtered-DiskANN~\cite{filtereddiskann} explicitly notes the limitation of decoupling vectors and attributes.
+The authors argue that such datasets are less realistic because ``in real-world datasets there could be correlation between the distribution of points and the set of labels that an ANNS algorithm could exploit.''
 
-Metric Evaluation
-How does the metric perform?
+This thesis addresses this gap by explicitly modeling attribute--embedding correlation and studying how this signal can support filtered vector search planning.
 
-Metric Integration
-How can the metric be integrated into a real world system?
+\section{Main Goals}
 
-How can it be used to enhance existing state-of-the-art filtered vector search techniques?
+This thesis has three main goals.
+
+First, we propose a family of correlation metrics for filtered vector search.
+These metrics measure how much the local neighborhood of a query differs from the global dataset with respect to a structured attribute distribution.
+Their purpose is to capture whether a filter is aligned with the region of the embedding space that the vector index is likely to explore.
+During the evaluation, we study three concrete variants of this idea and identify the most effective one.
+
+Second, we evaluate these metrics empirically.
+We analyze whether they can distinguish between positive, negative, and random query--filter relationships,
+and whether these distinctions explain differences in query difficulty and execution behavior.
+
+Third, we study how the selected metric can be integrated into a filtered vector search system.
+In particular, we investigate how it can be used for query planning and how it may complement existing state-of-the-art techniques such as ACORN.

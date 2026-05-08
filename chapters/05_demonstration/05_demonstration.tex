@@ -611,49 +611,165 @@ By contrast, Jensen--Shannon divergence is symmetric, always defined, and bounde
 We consider multiple variants of the correlation score to study how alignment direction and magnitude interact.
 
 \paragraph{Signed Interpretation (Baseline).}
-For ${C_{\mathrm{heur}}}$, the score decomposes as:
+For $C_{\mathrm{heur}}$, the score decomposes as:
 \[
-C_{\mathrm{heur}} = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \mathrm{sign}(\mathrm{lift}(q)).
+C_{\mathrm{heur}}
+=
+\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}})
+\cdot
+\mathrm{sign}(\mathrm{lift}(q)).
 \]
 
-The divergence measures how strongly the local distribution deviates from the global baseline, while the lift determines whether the filter range is locally enriched or depleted.
+Since the divergence is non-negative, the sign of the score is determined entirely by the lift.
+A positive value indicates local enrichment,
+\[
+P_{c^*}([L,U]) > P_{\mathrm{GLOBAL}}([L,U]),
+\]
+while a negative value indicates local depletion,
+\[
+P_{c^*}([L,U]) < P_{\mathrm{GLOBAL}}([L,U]).
+\]
 
-If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $\mathrm{corr}_1(q) \approx 0$, regardless of the lift.
-
-A positive score indicates enrichment,
-$P_{c^*}([L,U]) > P_{\mathrm{GLOBAL}}([L,U])$, while a negative score indicates depletion,
-$P_{c^*}([L,U]) < P_{\mathrm{GLOBAL}}([L,U])$.
-
-Thus, $C_{\mathrm{heur}}$ captures both the strength of distributional deviation and the direction of alignment.
+If the local and global distributions are nearly identical, then
+\[
+\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0,
+\]
+and therefore $C_{\mathrm{heur}} \approx 0$, regardless of the lift.
+Thus, $C_{\mathrm{heur}}$ can be interpreted as a signed divergence: its magnitude comes from distributional deviation, and its sign from the local enrichment or depletion of the filter range.
 
 \paragraph{Tanh-scaled Interpretation.}
-For $C_{\tanh}$, the score is given by:
+The tanh-scaled metric replaces the sign term with a continuous transformation of the lift. Therefore:
 \[
-C_{\tanh} = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \tanh(\mathrm{lift}(q)).
+\tanh(\mathrm{lift}(q))
+=
+\tanh\left(
+\log \frac{p_{c^*}(q)}{p_{\mathrm{GLOBAL}}(q)}
+\right).
 \]
 
-The divergence again measures the deviation between local and global distributions, but the lift now influences both the direction and the magnitude of the score through a smooth, bounded transformation.
+Let
+\[
+r =
+\frac{p_{c^*}(q)}{p_{\mathrm{GLOBAL}}(q)}.
+\]
 
-As in the baseline, the sign of the score indicates enrichment or depletion. However, stronger alignment leads to larger magnitudes, while extreme values are dampened by the $\tanh$ function.
+Then
+\[
+\tanh(\mathrm{lift}(q))
+=
+\tanh(\log r).
+\]
 
-If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $C_{\tanh} \approx 0$, regardless of the lift.
+Using the identity
+\[
+\tanh(x)
+=
+\frac{e^{2x}-1}{e^{2x}+1},
+\]
+we obtain
+\[
+\tanh(\log r)
+=
+\frac{e^{2\log r}-1}{e^{2\log r}+1}
+=
+\frac{r^2-1}{r^2+1}.
+\]
 
-Thus, $C_{\tanh}$ reflects both distributional deviation and the strength of alignment in a continuous manner.
+Substituting the probability masses back in gives
+\[
+\tanh\left(
+\log \frac{p_{c^*}(q)}{p_{\mathrm{GLOBAL}}(q)}
+\right)
+=
+\frac{
+p_{c^*}(q)^2 - p_{\mathrm{GLOBAL}}(q)^2
+}{
+p_{c^*}(q)^2 + p_{\mathrm{GLOBAL}}(q)^2
+}.
+\]
+
+This expression shows explicitly that the tanh factor compares the local and global masses in a symmetric and bounded way.
+The numerator determines the sign of the comparison, while the denominator normalizes the value.
+
+If we write
+\[
+a = p_{c^*}(q),
+\qquad
+b = p_{\mathrm{GLOBAL}}(q),
+\]
+then the tanh factor preserves the direction of the lift:
+\[
+\tanh\left(\log \frac{a}{b}\right)
+\begin{cases}
+> 0, & \text{if } a > b,\\
+= 0, & \text{if } a = b,\\
+< 0, & \text{if } a < b.
+\end{cases}
+\]
+
+At the same time, it is bounded between $-1$ and $1$:
+\[
+-1
+<
+\tanh\left(\log \frac{a}{b}\right)
+<
+1.
+\]
+
+More concretely,
+\[
+\frac{a}{b} \to \infty
+\quad \Rightarrow \quad
+\tanh\left(\log \frac{a}{b}\right) \to 1,
+\]
+\[
+\frac{a}{b} \to 0
+\quad \Rightarrow \quad
+\tanh\left(\log \frac{a}{b}\right) \to -1,
+\]
+and
+\[
+\frac{a}{b} = 1
+\quad \Rightarrow \quad
+\tanh(0)=0.
+\]
+
+Thus, the tanh-transformed lift, instead of growing without bound, it compresses the value into the interval $[-1,1]$.
+Large positive lift values saturate near $1$, large negative lift values saturate near $-1$, and weak differences around $a \approx b$ remain close to $0$.
+
+In the full metric,
+\[
+C_{\tanh}
+=
+\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}})
+\cdot
+\tanh(\mathrm{lift}(q)),
+\]
 
 \paragraph{Difference-based Interpretation.}
-For $C_{\mathrm{pgap}}$, the score is defined as:
+The difference-based score keeps the same divergence term, but changes how the direction of the correlation is measured.
+Instead of using a relative quantity such as lift, it directly compares the probability mass assigned to the query range by the local and global distributions:
 \[
-C_{\mathrm{pgap}} = \mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \cdot \big(P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U])\big).
+P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U]).
 \]
 
-The divergence again captures the deviation between local and global distributions, while the difference term measures the absolute change in probability mass.
+This term is positive when the filter range is more frequent in the local neighborhood than globally, negative when it is less frequent, and zero when both masses are equal.
+Therefore, it still distinguishes between local enrichment and local depletion.
 
-The sign indicates enrichment or depletion, as in the previous formulations. However, the magnitude depends on absolute differences rather than relative ones, making the score sensitive to the scale of the probabilities.
+The main difference is that this formulation measures an absolute probability gap.
+For example, a change from $0.40$ to $0.50$ and a change from $0.01$ to $0.11$ both give the same gap of $0.10$, even though the relative change is much larger in the second case.
+Thus, $C_{\mathrm{pgap}}$ is sensitive to the scale of the probabilities, not only to their ratio.
 
-If $\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}}) \approx 0$, then $C_{\mathrm{pgap}} \approx 0$, regardless of the difference term.
-
-Thus, $C_{\mathrm{pgap}}$ combines distributional deviation with absolute, rather than relative, alignment effects.
-
+The final score is
+\[
+C_{\mathrm{pgap}}
+=
+\mathrm{JS}(P_{c^*} \,\|\, P_{\mathrm{GLOBAL}})
+\cdot
+\big(
+P_{c^*}([L,U]) - P_{\mathrm{GLOBAL}}([L,U])
+\big)
+\]
 
 \section{Thresholding with \texorpdfstring{$\tau$}{tau}}\label{sec:tau}
 
