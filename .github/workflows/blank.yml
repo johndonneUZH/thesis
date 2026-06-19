@@ -1,0 +1,30 @@
+name: Build thesis PDF
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Compile thesis
+        uses: xu-cheng/latex-action@v4
+        with:
+          root_file: thesis.tex
+
+      - name: Commit rebuilt PDF
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add thesis.pdf
+          git diff --cached --quiet || git commit -m "Rebuild thesis PDF"
+          git push
